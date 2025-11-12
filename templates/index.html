@@ -1,0 +1,39 @@
+
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>Packlisten Converter (Web)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <div class="container">
+    <h1>Packlisten Converter</h1>
+    <p>Lade deine CSV/Excel-Datei hoch. Optional kannst du benutzerdefinierte Dichtungen als JSON angeben.</p>
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+      {% if msgs %}
+        <ul class="flashes">
+          {% for cat,text in msgs %}
+            <li class="{{cat}}">{{ text }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+    <form method="POST" enctype="multipart/form-data">
+      <label class="file-label">
+        <span>Datei auswählen</span>
+        <input type="file" name="input_file" required>
+      </label>
+
+      <label>Benutzerdefinierte Dichtungen (JSON, optional):</label>
+      <textarea name="user_dichtungen" rows="6" placeholder='[{"name":"...", "suffix":"...", "order":1}]'></textarea>
+
+      <button type="submit">Konvertieren</button>
+    </form>
+    <footer>
+      <small>Bereit für Render & Zoho CRM Web-Register (iframe).</small>
+    </footer>
+  </div>
+</body>
+</html>
