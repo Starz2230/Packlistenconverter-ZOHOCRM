@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 
 import sys, os, re, json, shutil, tempfile, tkinter as tk
-from tkinter import filedialog, messagebox
-from tkinter import ttk
+
+
 import math
 
 
@@ -23,6 +23,53 @@ import re
 import requests, subprocess, sys, tkinter as tk
 from packaging import version
 
+# --- Headless-/GUI-Schalter: tkinter nur laden, wenn wirklich vorhanden ---
+import os as _os
+
+HEADLESS = _os.environ.get("HEADLESS", "1") == "1"  # Standard: Headless (Web/Server)
+
+if not HEADLESS:
+    try:
+        import tkinter as tk  # noqa: F401
+        from tkinter import filedialog, messagebox  # noqa: F401
+        from tkinter import ttk  # noqa: F401
+        _TK_AVAILABLE = True
+    except Exception:
+        _TK_AVAILABLE = False
+        HEADLESS = True
+else:
+    _TK_AVAILABLE = False
+
+if HEADLESS:
+    # Fallback-Stubs, damit dein Code (z.B. messagebox.showinfo) weiterhin aufrufbar bleibt
+    class _DummyMessageBox:
+        @staticmethod
+        def showinfo(title, message): print(f"[INFO] {title}: {message}")
+        @staticmethod
+        def showwarning(title, message): print(f"[WARN] {title}: {message}")
+        @staticmethod
+        def showerror(title, message): print(f"[ERROR] {title}: {message}")
+        @staticmethod
+        def askyesno(title, message): 
+            print(f"[ASKYESNO - default NO] {title}: {message}")
+            return False
+
+    class _DummyFileDialog:
+        @staticmethod
+        def askopenfilename(*args, **kwargs):
+            raise RuntimeError("Dateiauswahl-Dialog ist im Headless-Modus nicht verfügbar.")
+
+        @staticmethod
+        def asksaveasfilename(*args, **kwargs):
+            raise RuntimeError("Speichern-Dialog ist im Headless-Modus nicht verfügbar.")
+
+    # Ersetze Namen, die im Code erwartet werden
+    messagebox = _DummyMessageBox()
+    filedialog = _DummyFileDialog()
+
+    # Dummy ttk für den Fall, dass irgendwo symbolische Referenzen vorkommen
+    class _DummyTtk: ...
+    ttk = _DummyTtk()
 GITHUB_API = "https://api.github.com/repos/Starz2230/MeinePacklistenApp/releases/latest"
 CURRENT_VERSION = "1.1.9"   # unbedingt anpassen, wenn du neu releast!
 
@@ -51,8 +98,8 @@ def check_for_updates():
         print("Update-Check fehlgeschlagen:", e)
 
 # Rufe das direkt beim Programmstart auf:
-check_for_updates()
-
+if not HEADLESS and _TK_AVAILABLE:
+    check_for_updates()
 CURRENT_VERSION = "1.2.0"  # Setze hier die aktuelle Version deines Converters
 
 import requests  # Stelle sicher, dass du das Modul "requests" installiert hast!
@@ -1732,8 +1779,9 @@ def start_tutorial(root, in_entry, out_entry, btn_manage_dichtungen, btn_convert
 def main():
     load_settings()
     root = tk.Tk()
+if not HEADLESS and _TK_AVAILABLE:
     check_for_updates()
-    root.title("Packliste Converter")
+root.title("Packliste Converter")
     apply_ttk_style(current_theme)
 
     icon_path = resource_path(ICON_FILE)
@@ -1898,5 +1946,5 @@ def main():
 
     root.mainloop()
 
-if __name__ == "__main__":
+if __name__ == '__main__' and not HEADLESS and _TK_AVAILABLE:
     main()
