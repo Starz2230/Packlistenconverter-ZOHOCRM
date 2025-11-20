@@ -1,57 +1,88 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8">
-  <title>Packlisten Converter (Web)</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <meta charset="UTF-8">
+    <title>Dichtungen verwalten</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-  <h1>Packlisten Converter (Web)</h1>
+<div class="container">
+    <header>
+        <h1>Dichtungen verwalten</h1>
+        <p>
+            Hier bearbeitest du den Inhalt von <code>dichtungen.json</code>.
+            Leere Namen werden ignoriert.
+        </p>
+    </header>
 
-  {# Flash-Messages (Fehler, Infos) #}
-  {% with msgs = get_flashed_messages(with_categories=true) %}
-    {% if msgs %}
-      <ul class="flashes">
-        {% for cat, text in msgs %}
-          <li class="{{ cat }}">{{ text }}</li>
-        {% endfor %}
-      </ul>
-    {% endif %}
-  {% endwith %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-container">
+          {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
 
-  <form method="POST" enctype="multipart/form-data">
-    <fieldset>
-      <legend>Packliste hochladen</legend>
-      <p>
-        <label>Datei (.xlsx / .xls / .csv):</label><br>
-        <input type="file" name="input_file" required>
-      </p>
-    </fieldset>
+    <main>
+        <form method="post" class="card">
+            <table class="dicht-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Standard?</th>
+                        <th>Zusatzwert</th>
+                        <th>Reihenfolge</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for i in range(total_rows) %}
+                    {% set d = dichtungen[i] if i < dichtungen|length else None %}
+                    <tr>
+                        <td>
+                            <input type="text" name="name_{{ i }}"
+                                   value="{{ d.name if d else '' }}"
+                                   placeholder="z.B. 6/4_S">
+                        </td>
+                        <td class="center">
+                            <input type="checkbox" name="always_{{ i }}"
+                                   {% if d and d.always_show %}checked{% endif %}>
+                        </td>
+                        <td>
+                            <input type="number" step="1"
+                                   name="value_{{ i }}"
+                                   value="{{ d.default_value if d else '' }}"
+                                   placeholder="0">
+                        </td>
+                        <td>
+                            <input type="number" step="1"
+                                   name="order_{{ i }}"
+                                   value="{{ d.order if d and d.order is not none else '' }}"
+                                   placeholder="">
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
 
-    <fieldset>
-      <legend>Dichtungen-Konfiguration</legend>
-      <p>
-        <small>
-          Wenn du hier nichts änderst, werden die Dichtungen aus <code>dichtungen.json</code>
-          verwendet – also dieselbe Konfiguration wie in deiner EXE.
-        </small>
-      </p>
-      <p>
-        <label>Optionale Dichtungen (JSON):</label><br>
-        <textarea name="user_dichtungen" rows="12" cols="80"
-          placeholder='{{ default_dichtungen_json }}'></textarea>
-      </p>
-      <p>
-        <small>
-          Beispiel:
-          <code>[{"name": "Dichtung_X_S", "always_show": true, "default_value": 0, "order": ""}]</code>
-        </small>
-      </p>
-    </fieldset>
+            <input type="hidden" name="max_index" value="{{ total_rows - 1 }}">
 
-    <p>
-      <button type="submit">Konvertieren &amp; herunterladen</button>
-    </p>
-  </form>
+            <div class="actions">
+                <button type="submit" class="btn-primary">
+                    Speichern
+                </button>
+                <a href="{{ url_for('index') }}" class="btn-secondary">
+                    Zurück
+                </a>
+            </div>
+
+            <p class="hint">
+                <strong>Hinweis:</strong> Zum Löschen einer Dichtung einfach den
+                Namen leer lassen und speichern.
+            </p>
+        </form>
+    </main>
+</div>
 </body>
 </html>
