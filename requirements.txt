@@ -1,5 +1,7 @@
-Flask==3.0.0
-gunicorn==21.2.0
+flask
+gunicorn
+
 pandas
-openpyxl
-numpy
+openpyxl>=3.1.5
+requests
+packaging
