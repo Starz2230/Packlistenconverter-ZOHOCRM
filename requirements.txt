@@ -1,7 +1,6 @@
-flask
-gunicorn
-
-pandas
-openpyxl>=3.1.5
-requests
-packaging
+Flask==3.0.3
+gunicorn==23.0.0
+pandas==2.2.2
+openpyxl==3.1.5
+requests==2.32.3
+packaging==24.1
