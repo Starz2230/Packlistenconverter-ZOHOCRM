@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <title>Dichtungen verwalten</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="page">
+
+<header class="header">
+    <div class="header-left">
+        <h1>Dichtungen verwalten</h1>
+        <p>Spalten-Konfiguration für den Packlisten-Converter</p>
+    </div>
+    <div class="header-right">
+        <a class="btn btn-secondary" href="{{ url_for('index') }}">
+            &larr; Zurück zum Converter
+        </a>
+    </div>
+</header>
+
+<main class="main">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-container">
+          {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <section class="card">
+        <form method="post" class="form">
+            <input type="hidden" name="max_index" value="{{ total_rows - 1 }}">
+
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Name der Dichtung (Spaltenname)</th>
+                        <th>Standard?</th>
+                        <th>Standard-Menge</th>
+                        <th>Reihenfolge (1, 2, 3 ...)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for i in range(total_rows) %}
+                        {% set d = dichtungen[i] if i < dichtungen|length else None %}
+                        <tr>
+                            <td>{{ i + 1 }}</td>
+                            <td>
+                                <input
+                                  type="text"
+                                  name="name_{{ i }}"
+                                  value="{{ d.name if d else '' }}"
+                                  placeholder="z.B. 6/4_S"
+                                >
+                            </td>
+                            <td class="center">
+                                <input
+                                  type="checkbox"
+                                  name="always_{{ i }}"
+                                  {% if d and d.always_show %}checked{% endif %}
+                                >
+                            </td>
+                            <td>
+                                <input
+                                  type="text"
+                                  name="value_{{ i }}"
+                                  value="{{ ('%.0f' % d.default_value) if d else '' }}"
+                                  placeholder="0"
+                                >
+                            </td>
+                            <td>
+                                <input
+                                  type="text"
+                                  name="order_{{ i }}"
+                                  value="{{ d.order if d else '' }}"
+                                  placeholder=""
+                                >
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">
+                    Speichern
+                </button>
+                <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                    Abbrechen
+                </a>
+            </div>
+
+            <p class="hint">
+                <strong>Standard?</strong> = Spalte wird immer angezeigt, auch wenn sie in der Eingabedatei leer ist.
+                Der Standard-Mengenwert wird zusätzlich in der Zeile „zusätzliche Dichtungen“ vorbelegt
+                und in die Summe eingerechnet – wie in der EXE.
+            </p>
+        </form>
+    </section>
+</main>
+
+<footer class="footer">
+    <span>Packlisten Converter – Dichtungen</span>
+</footer>
+
+</body>
+</html>
