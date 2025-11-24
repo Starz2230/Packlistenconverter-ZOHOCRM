@@ -14,9 +14,7 @@ from copy import copy
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
 
-# ------------------------------------------------------------
-# Rich-Text (fetter Wochentag) – wie in der EXE, aber mit Fallback
-# ------------------------------------------------------------
+# Rich-Text (fetter Wochentag) – fallback, falls openpyxl das nicht kann
 try:
     from openpyxl.cell.text import InlineFont
     from openpyxl.cell.rich_text import TextBlock, CellRichText
@@ -25,9 +23,9 @@ except Exception:
     InlineFont = TextBlock = CellRichText = None
     RICH_TEXT_AVAILABLE = False
 
-# ------------------------------------------------------------
-# Pfade & Konstanten
-# ------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Konstanten
+# ---------------------------------------------------------------------------
 
 weekday_map = {
     0: "MO",
@@ -65,15 +63,12 @@ DF_SUM_ROW = 0          # Summenzeile
 PLATZHALTER_COL_INDEX = 5  # Spalte E
 NUMBERING_COL = 1          # Spalte A (Zeilennummern)
 
-# AutoFit-Einstellung (kannst du später z.B. über Settings-Datei steuern)
-AUTO_FIT_COLUMNS = True
+DEFAULT_DICHTUNGEN = []
 
-# ------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
 # Dichtungen laden/speichern
-# ------------------------------------------------------------
-
-DEFAULT_DICHTUNGEN = []  # wenn keine Datei vorhanden ist
-
+# ---------------------------------------------------------------------------
 
 def load_dichtungen():
     path = resource_path(DICHTUNGEN_CONFIG)
@@ -108,9 +103,9 @@ def save_dichtungen(dichtungen_list):
         print("Fehler beim Speichern der Dichtungen:", e)
 
 
-# ------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # Helfer für Datums-/Textverarbeitung
-# ------------------------------------------------------------
+# ---------------------------------------------------------------------------
 
 def transform_zeitraum(val):
     """
@@ -189,16 +184,9 @@ def spalte_leer(df, colname):
     return col_series.eq("").all()
 
 
-# ------------------------------------------------------------
-# Dichtungen sortieren – wie in der EXE
-# ------------------------------------------------------------
-
-def get_suffix(name: str):
-    parts = name.rsplit("_", 1)
-    if len(parts) == 2 and parts[1].strip():
-        return parts[1].strip()
-    return ""
-
+# ---------------------------------------------------------------------------
+# Dichtungen sortieren (wie in der EXE)
+# ---------------------------------------------------------------------------
 
 def parse_numeric_part(name: str) -> float:
     m = re.search(r'(\d+)(?:/(\d+))?', name)
@@ -229,7 +217,6 @@ def final_sort_dichtungen(dichtungen, df):
     Wie in deiner EXE: Standard-Dichtungen vorn, danach Gruppierung
     nach Suffix und numerischem Teil.
     """
-
     def sort_key(d):
         is_std = d.get("always_show", False)
         order_str = str(d.get("order", "")).strip()
@@ -256,9 +243,9 @@ def final_sort_dichtungen(dichtungen, df):
     return sorted(dichtungen, key=sort_key)
 
 
-# ------------------------------------------------------------
-# Styles & Borders
-# ------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Style- und Border-Helfer
+# ---------------------------------------------------------------------------
 
 def copy_cell_style(src_cell, dst_cell):
     if src_cell.font:
@@ -299,7 +286,8 @@ def copy_column_with_style(ws, src_col_idx, dst_col_idx):
     src_letter = get_column_letter(src_col_idx)
     dst_letter = get_column_letter(dst_col_idx)
     if ws.column_dimensions[src_letter].width:
-        ws.column_dimensions[dst_letter].width = ws.column_dimensions[src_letter].width
+        ws.column_dimensions[dst_letter].width = \
+            ws.column_dimensions[src_letter].width
 
 
 def set_horizontal_dotted(ws, row_idx):
@@ -346,7 +334,7 @@ def set_bottom_solid(ws, row_idx):
     side = Side(style="thin", color="000000")
     max_col = ws.max_column
     for col_idx in range(1, max_col + 1):
-        c = ws.cell(row=row_idx, column=col_idx)
+        c = ws.cell(row=row, column=col_idx)
         b = copy(c.border) or Border()
         b.bottom = side
         c.border = b
@@ -388,79 +376,13 @@ def apply_dicht_name_break(dicht_name: str) -> str:
             return name
 
 
-# ------------------------------------------------------------
-# AutoFit-Ersatz (ohne Excel / win32com)
-# ------------------------------------------------------------
-
-def autofit_columns(ws, col_indices, min_width=8, max_width=40):
-    """
-    Einfacher AutoFit-Ersatz nur mit openpyxl:
-    passt Breite auf Basis der Textlänge an.
-    """
-    for col_idx in col_indices:
-        col_letter = get_column_letter(col_idx)
-        max_length = 0
-        for cell in ws[col_letter]:
-            value = cell.value
-            if value is None:
-                continue
-            text = str(value)
-            length = len(text)
-            if length > max_length:
-                max_length = length
-        if max_length > 0:
-            # kleiner Faktor, damit es optisch passt
-            adjusted_width = min(max_width, max(min_width, max_length + 1))
-            ws.column_dimensions[col_letter].width = adjusted_width
-
-
-# ------------------------------------------------------------
-# Auto-Dateinamen wie in der EXE
-# ------------------------------------------------------------
-
-def generate_auto_filename(df) -> str:
-    """
-    Erzeugt einen Dateinamen aus 'Service Techniker' + Zeitraum
-    (z.B. 'Name_01.01.2023-05.01.2023.xlsx').
-    """
-    serv = safe_val(df, "Service Techniker", 3)
-    date_range = get_zeitraum_von_bis(df, "Zeitraum")
-
-    def sanitize(text):
-        return "".join(c for c in text if c.isalnum() or c in ("-", "_"))
-
-    serv_sanitized = sanitize(serv)
-    date_sanitized = date_range.replace(".", "-").replace(" ", "")
-
-    if not serv_sanitized and not date_sanitized:
-        return "Packliste_konvertiert.xlsx"
-
-    base_filename = f"{serv_sanitized}_{date_sanitized}.xlsx"
-    return base_filename
-
-
-def compute_auto_filename_from_input(input_path: str) -> str:
-    """
-    Lädt die Eingabedatei und berechnet den Download-Dateinamen.
-    (Für die Web-Version – ggf. wird die Datei zweimal gelesen,
-     das ist aber bei typischen Packlisten kein Problem.)
-    """
-    ext = os.path.splitext(input_path)[1].lower()
-    if ext == ".csv":
-        df = pd.read_csv(input_path, sep=";", engine="python", header=0)
-    else:
-        df = pd.read_excel(input_path, header=0)
-    return generate_auto_filename(df)
-
-
-# ------------------------------------------------------------
-# Zentrale Konvertier-Funktion (Headless-Version)
-# ------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Zentrale Konvertier-Funktion (Web / Headless)
+# ---------------------------------------------------------------------------
 
 def convert_file(input_path, output_path, user_dichtungen, show_message=False):
     """
     Web-/Headless-Version deiner Converter-Logik.
-    Gibt output_path zurück.
     """
     template_path = resource_path(TEMPLATE_FILE)
     if not os.path.isfile(template_path):
@@ -468,7 +390,7 @@ def convert_file(input_path, output_path, user_dichtungen, show_message=False):
             f"Template-Datei '{TEMPLATE_FILE}' wurde nicht gefunden."
         )
 
-    # 1) Template öffnen und Breiten von F/G sichern
+    # 1) Template öffnen und Spaltenbreiten von F/G sichern
     template_orig_wb = openpyxl.load_workbook(template_path)
     template_orig_ws = template_orig_wb.active
     original_width_info = template_orig_ws.column_dimensions["F"].width
@@ -828,10 +750,6 @@ def convert_file(input_path, output_path, user_dichtungen, show_message=False):
             new_font = copy(cell.font)
             new_font.color = font_color_to_use
             cell.font = new_font
-
-    # 15) AutoFit-Simulation für Dichtungs-Spalten
-    if AUTO_FIT_COLUMNS:
-        autofit_columns(ws, dicht_spalten_sorted)
 
     # Speichern & aufräumen
     wb.save(output_path)
