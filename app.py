@@ -9,11 +9,17 @@ from flask import (
 # Immer Headless
 os.environ.setdefault("HEADLESS", "1")
 
-from packliste_core import convert_file, load_dichtungen, save_dichtungen  # noqa: E402
+from packliste_core import (
+    convert_file,
+    load_dichtungen,
+    save_dichtungen,
+    compute_auto_filename_from_input,
+)
 
 ALLOWED_EXTENSIONS = {"xlsx", "xls", "csv"}
 
 app = Flask(__name__)
+# In Produktion am besten SECRET_KEY über Environment setzen
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret")
 
 
@@ -41,35 +47,41 @@ def index():
 
         # Temporäre Dateien
         in_suffix = "." + file.filename.rsplit(".", 1)[1].lower()
-        tmp_in = tempfile.NamedTemporaryFile(
-            delete=False, suffix=in_suffix
-        )
+        tmp_in = tempfile.NamedTemporaryFile(delete=False, suffix=in_suffix)
         file.save(tmp_in.name)
         tmp_in.close()
 
-        tmp_out = tempfile.NamedTemporaryFile(
-            delete=False, suffix=".xlsx"
-        )
+        tmp_out = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
         out_path = tmp_out.name
         tmp_out.close()
 
         try:
+            # Dichtungen-Konfiguration laden
             user_dichtungen = load_dichtungen()
+
+            # Download-Dateinamen wie in der EXE generieren
+            download_name = compute_auto_filename_from_input(tmp_in.name)
+
+            # Konvertieren
             convert_file(tmp_in.name, out_path, user_dichtungen)
+
         except Exception as e:
             flash(f"Fehler bei der Konvertierung: {e}", "error")
             try:
                 os.remove(out_path)
             except Exception:
                 pass
-            return redirect(request.url)
-        finally:
             try:
                 os.remove(tmp_in.name)
             except Exception:
                 pass
-
-        download_name = "Packliste_konvertiert.xlsx"
+            return redirect(request.url)
+        finally:
+            # Eingabedatei immer löschen
+            try:
+                os.remove(tmp_in.name)
+            except Exception:
+                pass
 
         @after_this_request
         def cleanup(response):
@@ -79,9 +91,11 @@ def index():
                 pass
             return response
 
-        return send_file(out_path,
-                         as_attachment=True,
-                         download_name=download_name)
+        return send_file(
+            out_path,
+            as_attachment=True,
+            download_name=download_name
+        )
 
     return render_template("index.html")
 
@@ -129,7 +143,7 @@ def manage_dichtungen():
         d.setdefault("default_value", 0)
         d.setdefault("order", "")
 
-    extra_rows = 5
+    extra_rows = 5  # ein paar leere Zeilen für neue Dichtungen
     total_rows = len(dichtungen) + extra_rows
     return render_template("dichtungen.html",
                            dichtungen=dichtungen,
@@ -139,3 +153,8 @@ def manage_dichtungen():
 @app.route("/health")
 def health():
     return {"status": "ok"}
+
+
+if __name__ == "__main__":
+    # Für lokales Testen
+    app.run(debug=True, host="0.0.0.0", port=5000)
