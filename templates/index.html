@@ -1,88 +1,71 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="de">
 <head>
-    <meta charset="UTF-8">
-    <title>Dichtungen verwalten</title>
+    <meta charset="utf-8">
+    <title>Packlisten Converter (Web)</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-<body>
-<div class="container">
-    <header>
-        <h1>Dichtungen verwalten</h1>
-        <p>
-            Hier bearbeitest du den Inhalt von <code>dichtungen.json</code>.
-            Leere Namen werden ignoriert.
-        </p>
-    </header>
+<body class="page">
 
+<header class="header">
+    <div class="header-left">
+        <h1>Packlisten Converter</h1>
+        <p>Zoho CRM &rarr; Monteur-Packliste (Excel)</p>
+    </div>
+    <div class="header-right">
+        <a class="btn btn-secondary" href="{{ url_for('manage_dichtungen') }}">
+            Dichtungen verwalten
+        </a>
+    </div>
+</header>
+
+<main class="main">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
         <div class="flash-container">
           {% for category, message in messages %}
-            <div class="flash {{ category }}">{{ message }}</div>
+            <div class="flash flash-{{ category }}">{{ message }}</div>
           {% endfor %}
         </div>
       {% endif %}
     {% endwith %}
 
-    <main>
-        <form method="post" class="card">
-            <table class="dicht-table">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Standard?</th>
-                        <th>Zusatzwert</th>
-                        <th>Reihenfolge</th>
-                    </tr>
-                </thead>
-                <tbody>
-                {% for i in range(total_rows) %}
-                    {% set d = dichtungen[i] if i < dichtungen|length else None %}
-                    <tr>
-                        <td>
-                            <input type="text" name="name_{{ i }}"
-                                   value="{{ d.name if d else '' }}"
-                                   placeholder="z.B. 6/4_S">
-                        </td>
-                        <td class="center">
-                            <input type="checkbox" name="always_{{ i }}"
-                                   {% if d and d.always_show %}checked{% endif %}>
-                        </td>
-                        <td>
-                            <input type="number" step="1"
-                                   name="value_{{ i }}"
-                                   value="{{ d.default_value if d else '' }}"
-                                   placeholder="0">
-                        </td>
-                        <td>
-                            <input type="number" step="1"
-                                   name="order_{{ i }}"
-                                   value="{{ d.order if d and d.order is not none else '' }}"
-                                   placeholder="">
-                        </td>
-                    </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-
-            <input type="hidden" name="max_index" value="{{ total_rows - 1 }}">
-
-            <div class="actions">
-                <button type="submit" class="btn-primary">
-                    Speichern
-                </button>
-                <a href="{{ url_for('index') }}" class="btn-secondary">
-                    Zurück
-                </a>
+    <section class="card">
+        <h2>Datei konvertieren</h2>
+        <form method="post" enctype="multipart/form-data" class="form">
+            <div class="form-row">
+                <label for="input_file">Eingabedatei (Excel/CSV aus Zoho):</label>
+                <input type="file" id="input_file" name="input_file" required>
             </div>
 
             <p class="hint">
-                <strong>Hinweis:</strong> Zum Löschen einer Dichtung einfach den
-                Namen leer lassen und speichern.
+                Erlaubte Formate: <strong>.xlsx, .xls, .csv</strong><br>
+                Die Ausgabe wird automatisch als optimierte Excel-Packliste erstellt.
             </p>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">
+                    Konvertieren &amp; herunterladen
+                </button>
+            </div>
         </form>
-    </main>
-</div>
+    </section>
+
+    <section class="card card-small">
+        <h3>Hinweise</h3>
+        <ul>
+            <li>Die Dichtungen und Standardwerte kannst du unter
+                <strong>„Dichtungen verwalten“</strong> anpassen.</li>
+            <li>Der Dateiname der Ausgabe orientiert sich an
+                <em>Service Techniker</em> und dem <em>Zeitraum</em>
+                – so wie in der Windows-EXE.</li>
+        </ul>
+    </section>
+</main>
+
+<footer class="footer">
+    <span>Packlisten Converter (Web)</span>
+</footer>
+
 </body>
 </html>
