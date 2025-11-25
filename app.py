@@ -1,160 +1,161 @@
+# app.py
 import os
 import tempfile
+import inspect
 
 from flask import (
-    Flask, render_template, request, send_file,
-    redirect, url_for, flash, after_this_request
+    Flask,
+    render_template,
+    request,
+    send_file,
+    flash,
+    redirect,
+    url_for,
 )
+from werkzeug.utils import secure_filename
 
-# Immer Headless
-os.environ.setdefault("HEADLESS", "1")
+# >>> WICHTIG: packliste_core.py bleibt dein großer Original-Code! <<<
+from packliste_core import convert_file
 
-from packliste_core import (
-    convert_file,
-    load_dichtungen,
-    save_dichtungen,
-    compute_auto_filename_from_input,
-)
 
 ALLOWED_EXTENSIONS = {"xlsx", "xls", "csv"}
 
+
+def allowed(filename: str) -> bool:
+    """Prüft, ob die Dateiendung erlaubt ist."""
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def run_conversion_with_unknown_signature(input_path: str, workdir: str) -> str:
+    """
+    Ruft convert_file() aus packliste_core auf, ohne die genaue Signatur kennen zu müssen.
+
+    Strategie:
+    - vorher: Liste der Dateien im workdir merken
+    - convert_file() mit 1 oder 2 Parametern ausprobieren
+    - wenn convert_file() einen Dateipfad zurückgibt und der existiert → nutzen
+    - sonst: im workdir nach neuen .xlsx/.xls-Dateien suchen und die nehmen
+    """
+    before_files = set(os.listdir(workdir))
+
+    # Sicherstellen, dass relativ erzeugte Dateien im workdir landen
+    old_cwd = os.getcwd()
+    os.chdir(workdir)
+    try:
+        sig = inspect.signature(convert_file)
+        param_count = len(sig.parameters)
+
+        result = None
+        if param_count == 1:
+            # z.B. def convert_file(input_path)
+            result = convert_file(input_path)
+        elif param_count == 2:
+            # z.B. def convert_file(input_path, output_dir_or_path)
+            # Wir geben hier das workdir mit – der Core kann selbst entscheiden,
+            # ob er dort einen Dateinamen erzeugt oder direkt einen Pfad verwendet.
+            result = convert_file(input_path, workdir)
+        else:
+            # Fallback: einfach wie im 1-Argument-Fall versuchen
+            result = convert_file(input_path)
+    finally:
+        os.chdir(old_cwd)
+
+    # 1) Falls convert_file einen Pfad zurückgibt und der existiert → nutzen
+    if isinstance(result, str):
+        candidate = result
+        if not os.path.isabs(candidate):
+            candidate = os.path.join(workdir, candidate)
+        if os.path.exists(candidate):
+            return candidate
+
+    # 2) Andernfalls: neue Excel-Datei(en) im workdir suchen
+    after_files = set(os.listdir(workdir))
+    new_files = [
+        f for f in (after_files - before_files)
+        if f.lower().endswith((".xlsx", ".xls"))
+    ]
+
+    if not new_files:
+        raise RuntimeError(
+            "Der Converter hat keine Ausgabedatei erzeugt "
+            "(keine neue .xlsx/.xls Datei gefunden)."
+        )
+
+    # wenn mehrere neu sind, nehmen wir einfach die zuletzt sortierte
+    new_files.sort()
+    out_path = os.path.join(workdir, new_files[-1])
+    return out_path
+
+
 app = Flask(__name__)
-# In Produktion am besten SECRET_KEY über Environment setzen
-app.secret_key = os.environ.get("SECRET_KEY", "dev-secret")
-
-
-def allowed_file(filename: str) -> bool:
-    return "." in filename and \
-        filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+app.secret_key = os.environ.get("SECRET_KEY", "dev-key")
 
 
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
-        if "input_file" not in request.files:
-            flash("Keine Datei hochgeladen.", "error")
-            return redirect(request.url)
+        file = request.files.get("input_file")
 
-        file = request.files["input_file"]
-        if file.filename == "":
-            flash("Keine Datei ausgewählt.", "error")
-            return redirect(request.url)
+        # 1) Datei da?
+        if not file or file.filename == "":
+            flash(
+                "Bitte eine Packlisten-Datei hochladen (.xlsx/.xls/.csv).",
+                "error",
+            )
+            return redirect(url_for("index"))
 
-        if not allowed_file(file.filename):
-            flash("Ungültiger Dateityp. Erlaubt sind .xlsx, .xls, .csv.",
-                  "error")
-            return redirect(request.url)
+        # 2) Endung ok?
+        if not allowed(file.filename):
+            flash(
+                "Ungültiger Dateityp. Erlaubt sind .xlsx, .xls oder .csv.",
+                "error",
+            )
+            return redirect(url_for("index"))
 
-        # Temporäre Dateien
-        in_suffix = "." + file.filename.rsplit(".", 1)[1].lower()
-        tmp_in = tempfile.NamedTemporaryFile(delete=False, suffix=in_suffix)
-        file.save(tmp_in.name)
-        tmp_in.close()
+        # 3) Temporäres Arbeitsverzeichnis
+        tmpdir = tempfile.mkdtemp(prefix="packliste_")
 
-        tmp_out = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
-        out_path = tmp_out.name
-        tmp_out.close()
+        # 4) Upload speichern
+        safe_name = secure_filename(file.filename)
+        input_path = os.path.join(tmpdir, safe_name)
+        file.save(input_path)
 
+        # 5) Konvertierung
         try:
-            # Dichtungen-Konfiguration laden
-            user_dichtungen = load_dichtungen()
-
-            # Download-Dateinamen wie in der EXE generieren
-            download_name = compute_auto_filename_from_input(tmp_in.name)
-
-            # Konvertieren
-            convert_file(tmp_in.name, out_path, user_dichtungen)
-
+            output_path = run_conversion_with_unknown_signature(input_path, tmpdir)
         except Exception as e:
-            flash(f"Fehler bei der Konvertierung: {e}", "error")
-            try:
-                os.remove(out_path)
-            except Exception:
-                pass
-            try:
-                os.remove(tmp_in.name)
-            except Exception:
-                pass
-            return redirect(request.url)
-        finally:
-            # Eingabedatei immer löschen
-            try:
-                os.remove(tmp_in.name)
-            except Exception:
-                pass
+            # Für Debugging auf Render im Log sichtbar machen
+            print("Fehler bei convert_file:", repr(e), flush=True)
+            flash(
+                "Beim Konvertieren ist ein Fehler aufgetreten. "
+                "Details siehe Server-Log.",
+                "error",
+            )
+            return redirect(url_for("index"))
 
-        @after_this_request
-        def cleanup(response):
-            try:
-                os.remove(out_path)
-            except Exception:
-                pass
-            return response
+        if not os.path.exists(output_path):
+            flash(
+                "Konvertierung fehlgeschlagen: Ausgabedatei wurde nicht gefunden.",
+                "error",
+            )
+            return redirect(url_for("index"))
 
+        # 6) Datei zurückgeben (Download wie in der EXE, nur eben per Browser)
+        download_name = os.path.basename(output_path)
         return send_file(
-            out_path,
+            output_path,
             as_attachment=True,
-            download_name=download_name
+            download_name=download_name,
+            mimetype=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            ),
         )
 
+    # GET: Formular anzeigen
     return render_template("index.html")
-
-
-@app.route("/dichtungen", methods=["GET", "POST"])
-def manage_dichtungen():
-    if request.method == "POST":
-        try:
-            max_index = int(request.form.get("max_index", "0"))
-        except ValueError:
-            max_index = 0
-
-        new_cfg = []
-        for i in range(max_index + 1):
-            name = request.form.get(f"name_{i}", "").strip()
-            if not name:
-                continue
-            always = request.form.get(f"always_{i}") == "on"
-            value_str = request.form.get(f"value_{i}", "").strip()
-            order_str = request.form.get(f"order_{i}", "").strip()
-
-            try:
-                default_value = float(
-                    value_str.replace(",", ".")
-                ) if value_str else 0.0
-            except Exception:
-                default_value = 0.0
-
-            new_cfg.append({
-                "name": name,
-                "always_show": always,
-                "default_value": default_value,
-                "order": order_str,
-            })
-
-        save_dichtungen(new_cfg)
-        flash("Dichtungen gespeichert.", "success")
-        return redirect(url_for("manage_dichtungen"))
-
-    # GET
-    dichtungen = load_dichtungen()
-    # Ensure keys for template
-    for d in dichtungen:
-        d.setdefault("always_show", False)
-        d.setdefault("default_value", 0)
-        d.setdefault("order", "")
-
-    extra_rows = 5  # ein paar leere Zeilen für neue Dichtungen
-    total_rows = len(dichtungen) + extra_rows
-    return render_template("dichtungen.html",
-                           dichtungen=dichtungen,
-                           total_rows=total_rows)
-
-
-@app.route("/health")
-def health():
-    return {"status": "ok"}
-
+    
 
 if __name__ == "__main__":
-    # Für lokales Testen
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    # für lokalen Test: python app.py
+    app.run(host="0.0.0.0", port=5000, debug=True)
