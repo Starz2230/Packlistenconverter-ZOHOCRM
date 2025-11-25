@@ -1,161 +1,171 @@
-# app.py
 import os
 import tempfile
-import inspect
+import traceback
+import html
+from pathlib import Path
 
 from flask import (
     Flask,
     render_template,
     request,
     send_file,
-    flash,
     redirect,
     url_for,
+    flash,
 )
 from werkzeug.utils import secure_filename
 
-# >>> WICHTIG: packliste_core.py bleibt dein großer Original-Code! <<<
-from packliste_core import convert_file
+# -------------------------------------------------------
+# Versuch, die Konvertierfunktion aus deinem Core zu holen
+# -------------------------------------------------------
+try:
+    from packliste_core import convert_file
+except ImportError:
+    convert_file = None
 
-
+# Welche Dateitypen erlaubt sind
 ALLOWED_EXTENSIONS = {"xlsx", "xls", "csv"}
 
 
-def allowed(filename: str) -> bool:
-    """Prüft, ob die Dateiendung erlaubt ist."""
+def allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-def run_conversion_with_unknown_signature(input_path: str, workdir: str) -> str:
-    """
-    Ruft convert_file() aus packliste_core auf, ohne die genaue Signatur kennen zu müssen.
-
-    Strategie:
-    - vorher: Liste der Dateien im workdir merken
-    - convert_file() mit 1 oder 2 Parametern ausprobieren
-    - wenn convert_file() einen Dateipfad zurückgibt und der existiert → nutzen
-    - sonst: im workdir nach neuen .xlsx/.xls-Dateien suchen und die nehmen
-    """
-    before_files = set(os.listdir(workdir))
-
-    # Sicherstellen, dass relativ erzeugte Dateien im workdir landen
-    old_cwd = os.getcwd()
-    os.chdir(workdir)
-    try:
-        sig = inspect.signature(convert_file)
-        param_count = len(sig.parameters)
-
-        result = None
-        if param_count == 1:
-            # z.B. def convert_file(input_path)
-            result = convert_file(input_path)
-        elif param_count == 2:
-            # z.B. def convert_file(input_path, output_dir_or_path)
-            # Wir geben hier das workdir mit – der Core kann selbst entscheiden,
-            # ob er dort einen Dateinamen erzeugt oder direkt einen Pfad verwendet.
-            result = convert_file(input_path, workdir)
-        else:
-            # Fallback: einfach wie im 1-Argument-Fall versuchen
-            result = convert_file(input_path)
-    finally:
-        os.chdir(old_cwd)
-
-    # 1) Falls convert_file einen Pfad zurückgibt und der existiert → nutzen
-    if isinstance(result, str):
-        candidate = result
-        if not os.path.isabs(candidate):
-            candidate = os.path.join(workdir, candidate)
-        if os.path.exists(candidate):
-            return candidate
-
-    # 2) Andernfalls: neue Excel-Datei(en) im workdir suchen
-    after_files = set(os.listdir(workdir))
-    new_files = [
-        f for f in (after_files - before_files)
-        if f.lower().endswith((".xlsx", ".xls"))
-    ]
-
-    if not new_files:
-        raise RuntimeError(
-            "Der Converter hat keine Ausgabedatei erzeugt "
-            "(keine neue .xlsx/.xls Datei gefunden)."
-        )
-
-    # wenn mehrere neu sind, nehmen wir einfach die zuletzt sortierte
-    new_files.sort()
-    out_path = os.path.join(workdir, new_files[-1])
-    return out_path
-
-
 app = Flask(__name__)
+# max. 32 MB Upload (kannst du anpassen)
+app.config["MAX_CONTENT_LENGTH"] = 32 * 1024 * 1024
 app.secret_key = os.environ.get("SECRET_KEY", "dev-key")
 
 
+# -------------------------------------------------------------------
+# Wrapper, der versucht, deine convert_file-Funktion flexibel aufzurufen
+# -------------------------------------------------------------------
+def run_conversion(input_path: Path, output_path: Path) -> Path:
+    """
+    Ruft convert_file aus packliste_core auf.
+
+    Unterstützte Varianten:
+      - convert_file(input_path, output_path)
+      - convert_file(input_path)  → liefert entweder Pfad zurück
+                                   oder überschreibt input in-place
+    """
+    if convert_file is None:
+        raise RuntimeError(
+            "Konnte convert_file aus packliste_core.py nicht importieren. "
+            "Bitte prüfe, ob dort eine Funktion 'convert_file' definiert ist."
+        )
+
+    # 1) Versuche: convert_file(input_path, output_path)
+    try:
+        result = convert_file(str(input_path), str(output_path))
+
+        # Wenn die Funktion einen Pfad zurückgibt, nimm den
+        if isinstance(result, (str, Path)) and Path(result).is_file():
+            return Path(result)
+
+        # Wenn sie selbst in output_path geschrieben hat
+        if output_path.is_file():
+            return output_path
+
+    except TypeError:
+        # Signatur passt nicht, dann nächste Variante
+        pass
+
+    # 2) Versuche: convert_file(input_path)
+    result = convert_file(str(input_path))
+
+    if isinstance(result, (str, Path)):
+        result_path = Path(result)
+        if result_path.is_file():
+            return result_path
+
+    # Wenn nichts zurückgegeben wurde, vielleicht in-place überschrieben
+    if input_path.is_file():
+        return input_path
+
+    raise RuntimeError(
+        "convert_file hat keine gültige Ausgabedatei erzeugt. "
+        "Bitte prüfe die Implementierung in packliste_core.py."
+    )
+
+
+# ---------------------------------
+# Startseite + Upload / Download
+# ---------------------------------
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
-        file = request.files.get("input_file")
-
-        # 1) Datei da?
-        if not file or file.filename == "":
-            flash(
-                "Bitte eine Packlisten-Datei hochladen (.xlsx/.xls/.csv).",
-                "error",
-            )
-            return redirect(url_for("index"))
-
-        # 2) Endung ok?
-        if not allowed(file.filename):
-            flash(
-                "Ungültiger Dateityp. Erlaubt sind .xlsx, .xls oder .csv.",
-                "error",
-            )
-            return redirect(url_for("index"))
-
-        # 3) Temporäres Arbeitsverzeichnis
-        tmpdir = tempfile.mkdtemp(prefix="packliste_")
-
-        # 4) Upload speichern
-        safe_name = secure_filename(file.filename)
-        input_path = os.path.join(tmpdir, safe_name)
-        file.save(input_path)
-
-        # 5) Konvertierung
         try:
-            output_path = run_conversion_with_unknown_signature(input_path, tmpdir)
-        except Exception as e:
-            # Für Debugging auf Render im Log sichtbar machen
-            print("Fehler bei convert_file:", repr(e), flush=True)
-            flash(
-                "Beim Konvertieren ist ein Fehler aufgetreten. "
-                "Details siehe Server-Log.",
-                "error",
+            # --- Datei vorhanden? ---
+            if (
+                "input_file" not in request.files
+                or request.files["input_file"].filename == ""
+            ):
+                flash(
+                    "Bitte eine Packlisten-Datei hochladen (.xlsx / .xls / .csv).",
+                    "error",
+                )
+                return redirect(url_for("index"))
+
+            upload_file = request.files["input_file"]
+            filename = secure_filename(upload_file.filename)
+
+            # --- Typ prüfen ---
+            if not allowed_file(filename):
+                flash(
+                    "Ungültiger Dateityp. Erlaubt sind: .xlsx, .xls, .csv.",
+                    "error",
+                )
+                return redirect(url_for("index"))
+
+            # --- Temp-Ordner & Pfade ---
+            tmpdir = Path(tempfile.mkdtemp(prefix="packliste_"))
+            input_path = tmpdir / filename
+            upload_file.save(input_path)
+
+            # Ziel-Dateiname: gleicher Name + "_konvertiert.xlsx"
+            base_name = input_path.stem
+            output_filename = f"{base_name}_konvertiert.xlsx"
+            output_path = tmpdir / output_filename
+
+            # --- Konvertierung ausführen ---
+            converted_path = run_conversion(input_path, output_path)
+
+            if not converted_path.is_file():
+                raise RuntimeError(
+                    f"Konvertierung hat keine Ausgabedatei erzeugt: {converted_path}"
+                )
+
+            # --- Download an Browser schicken ---
+            return send_file(
+                converted_path,
+                as_attachment=True,
+                download_name=converted_path.name,
             )
-            return redirect(url_for("index"))
 
-        if not os.path.exists(output_path):
-            flash(
-                "Konvertierung fehlgeschlagen: Ausgabedatei wurde nicht gefunden.",
-                "error",
+        except Exception:
+            # Vollständigen Traceback im Browser anzeigen,
+            # damit du auf Render genau siehst, was schiefgeht.
+            tb = traceback.format_exc()
+            app.logger.error("Fehler bei der Konvertierung:\n%s", tb)
+
+            return (
+                "<h1>Fehler beim Konvertieren</h1>"
+                "<p>Details siehe unten. "
+                "Die gleiche Fehlermeldung findest du auch in den Render-Logs.</p>"
+                f"<pre>{html.escape(tb)}</pre>",
+                500,
+                {"Content-Type": "text/html; charset=utf-8"},
             )
-            return redirect(url_for("index"))
 
-        # 6) Datei zurückgeben (Download wie in der EXE, nur eben per Browser)
-        download_name = os.path.basename(output_path)
-        return send_file(
-            output_path,
-            as_attachment=True,
-            download_name=download_name,
-            mimetype=(
-                "application/vnd.openxmlformats-officedocument."
-                "spreadsheetml.sheet"
-            ),
-        )
-
-    # GET: Formular anzeigen
+    # GET → Formular anzeigen
     return render_template("index.html")
-    
 
+
+# Lokales Testen
 if __name__ == "__main__":
-    # für lokalen Test: python app.py
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(
+        debug=True,
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 5000)),
+    )
