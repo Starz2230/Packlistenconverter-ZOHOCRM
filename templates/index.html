@@ -31,6 +31,7 @@
     <main class="main">
         <section class="card">
             <h2>Packliste konvertieren</h2>
+
             <form method="post" enctype="multipart/form-data">
                 <div class="form-row">
                     <label for="input_file">Packlisten-Datei auswählen (*.xlsx / *.xls / *.csv)</label>
@@ -48,7 +49,7 @@
                     <input type="text"
                            id="custom_output_name"
                            name="custom_output_name"
-                           placeholder="z.B. Packliste_Zoho_{{ '%Y%m%d'|date }}">
+                           placeholder="z.B. Packliste_Zoho_20251124">
                 </div>
 
                 <div class="form-actions">
@@ -70,7 +71,7 @@
     </main>
 
     <footer class="footer">
-        <small>&copy; {{  now().year if false else '' }} Packlistenconverter</small>
+        <small>&copy; Packlistenconverter</small>
     </footer>
 
 </div>
