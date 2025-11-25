@@ -1,71 +1,79 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="de">
 <head>
-    <meta charset="utf-8">
-    <title>Packlisten Converter (Web)</title>
+    <meta charset="UTF-8">
+    <title>Packlistenconverter – Zoho CRM</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body class="page">
+<body>
 
-<header class="header">
-    <div class="header-left">
-        <h1>Packlisten Converter</h1>
-        <p>Zoho CRM &rarr; Monteur-Packliste (Excel)</p>
-    </div>
-    <div class="header-right">
-        <a class="btn btn-secondary" href="{{ url_for('manage_dichtungen') }}">
-            Dichtungen verwalten
-        </a>
-    </div>
-</header>
+<div class="page">
 
-<main class="main">
+    <header class="header">
+        <h1>Packlistenconverter &rarr; Zoho CRM</h1>
+        <p>Excel-Packliste hochladen, serverseitig konvertieren und fertig formatierte Datei herunterladen.</p>
+    </header>
+
+    {# Flash-Meldungen (Fehler / Erfolg) #}
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
         <div class="flash-container">
           {% for category, message in messages %}
-            <div class="flash flash-{{ category }}">{{ message }}</div>
+            <div class="flash flash-{{ category|e }}">
+                {{ message }}
+            </div>
           {% endfor %}
         </div>
       {% endif %}
     {% endwith %}
 
-    <section class="card">
-        <h2>Datei konvertieren</h2>
-        <form method="post" enctype="multipart/form-data" class="form">
-            <div class="form-row">
-                <label for="input_file">Eingabedatei (Excel/CSV aus Zoho):</label>
-                <input type="file" id="input_file" name="input_file" required>
-            </div>
+    <main class="main">
+        <section class="card">
+            <h2>Packliste konvertieren</h2>
+            <form method="post" enctype="multipart/form-data">
+                <div class="form-row">
+                    <label for="input_file">Packlisten-Datei auswählen (*.xlsx / *.xls / *.csv)</label>
+                    <input type="file"
+                           id="input_file"
+                           name="input_file"
+                           accept=".xlsx,.xls,.csv"
+                           required>
+                </div>
 
-            <p class="hint">
-                Erlaubte Formate: <strong>.xlsx, .xls, .csv</strong><br>
-                Die Ausgabe wird automatisch als optimierte Excel-Packliste erstellt.
-            </p>
+                <div class="form-row">
+                    <label for="custom_output_name">
+                        Gewünschter Dateiname (optional, ohne .xlsx)
+                    </label>
+                    <input type="text"
+                           id="custom_output_name"
+                           name="custom_output_name"
+                           placeholder="z.B. Packliste_Zoho_{{ '%Y%m%d'|date }}">
+                </div>
 
-            <div class="form-actions">
-                <button type="submit" class="btn btn-primary">
-                    Konvertieren &amp; herunterladen
-                </button>
-            </div>
-        </form>
-    </section>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">
+                        Konvertieren &amp; herunterladen
+                    </button>
+                </div>
+            </form>
+        </section>
 
-    <section class="card card-small">
-        <h3>Hinweise</h3>
-        <ul>
-            <li>Die Dichtungen und Standardwerte kannst du unter
-                <strong>„Dichtungen verwalten“</strong> anpassen.</li>
-            <li>Der Dateiname der Ausgabe orientiert sich an
-                <em>Service Techniker</em> und dem <em>Zeitraum</em>
-                – so wie in der Windows-EXE.</li>
-        </ul>
-    </section>
-</main>
+        <section class="card card-info">
+            <h3>Hinweise</h3>
+            <ul>
+                <li>Die Datei wird nur temporär auf dem Server gespeichert und nach der Konvertierung wieder gelöscht.</li>
+                <li>Das Format der ZOHO-Packliste (Spalten, Layout) kommt aus <code>packliste_core.py</code>.</li>
+                <li>Unterstützte Formate: <strong>.xlsx, .xls, .csv</strong>.</li>
+            </ul>
+        </section>
+    </main>
 
-<footer class="footer">
-    <span>Packlisten Converter (Web)</span>
-</footer>
+    <footer class="footer">
+        <small>&copy; {{  now().year if false else '' }} Packlistenconverter</small>
+    </footer>
+
+</div>
 
 </body>
 </html>
