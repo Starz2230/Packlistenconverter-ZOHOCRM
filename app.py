@@ -1,8 +1,9 @@
 import os
 import tempfile
-import traceback
 import html
 from pathlib import Path
+import importlib
+import traceback
 
 from flask import (
     Flask,
@@ -16,82 +17,129 @@ from flask import (
 from werkzeug.utils import secure_filename
 
 # -------------------------------------------------------
-# Versuch, die Konvertierfunktion aus deinem Core zu holen
+# Konfiguration
 # -------------------------------------------------------
-try:
-    from packliste_core import convert_file
-except ImportError:
-    convert_file = None
 
-# Welche Dateitypen erlaubt sind
 ALLOWED_EXTENSIONS = {"xlsx", "xls", "csv"}
 
 
 def allowed_file(filename: str) -> bool:
+    """Prüfe, ob die Dateiendung erlaubt ist."""
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
 app = Flask(__name__)
-# max. 32 MB Upload (kannst du anpassen)
-app.config["MAX_CONTENT_LENGTH"] = 32 * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = 32 * 1024 * 1024  # max. 32 MB Upload
 app.secret_key = os.environ.get("SECRET_KEY", "dev-key")
 
 
-# -------------------------------------------------------------------
-# Wrapper, der versucht, deine convert_file-Funktion flexibel aufzurufen
-# -------------------------------------------------------------------
+# -------------------------------------------------------
+# Hilfsfunktion: packliste_core dynamisch laden + ausführen
+# -------------------------------------------------------
+
 def run_conversion(input_path: Path, output_path: Path) -> Path:
     """
-    Ruft convert_file aus packliste_core auf.
+    Lädt packliste_core.py dynamisch und ruft dort convert_file(...) auf.
 
-    Unterstützte Varianten:
-      - convert_file(input_path, output_path)
-      - convert_file(input_path)  → liefert entweder Pfad zurück
-                                   oder überschreibt input in-place
+    Unterstützte Varianten in packliste_core:
+
+      def convert_file(input_path, output_path):
+          # schreibt nach output_path
+          return output_path   (optional)
+
+      oder
+
+      def convert_file(input_path):
+          # schreibt z.B. eine Datei und gibt den Pfad zurück
+          return pfad_zur_ausgabedatei
+
+      oder (zur Not)
+
+      def convert_file(input_path):
+          # überschreibt input_path in-place
+          return None
     """
-    if convert_file is None:
+    # 1) packliste_core importieren
+    try:
+        core = importlib.import_module("packliste_core")
+    except Exception as e:
         raise RuntimeError(
-            "Konnte convert_file aus packliste_core.py nicht importieren. "
-            "Bitte prüfe, ob dort eine Funktion 'convert_file' definiert ist."
+            "Fehler beim Import von 'packliste_core.py'. "
+            "Stelle sicher, dass die Datei im gleichen Verzeichnis wie app.py liegt."
+        ) from e
+
+    convert_fn = getattr(core, "convert_file", None)
+    if convert_fn is None or not callable(convert_fn):
+        raise RuntimeError(
+            "In 'packliste_core.py' wurde keine Funktion 'convert_file' gefunden.\n\n"
+            "Bitte füge dort z.B. folgendes hinzu (als Wrapper um deine bestehende Logik):\n"
+            "    def convert_file(input_path, output_path):\n"
+            "        # deine bisherige Konvertierung hier aufrufen\n"
+            "        ...\n"
         )
 
-    # 1) Versuche: convert_file(input_path, output_path)
+    # 2) Versuch: convert_file(input_path, output_path)
     try:
-        result = convert_file(str(input_path), str(output_path))
+        result = convert_fn(str(input_path), str(output_path))
 
-        # Wenn die Funktion einen Pfad zurückgibt, nimm den
-        if isinstance(result, (str, Path)) and Path(result).is_file():
-            return Path(result)
+        # Wenn ein Pfad zurückgegeben wird → benutzen
+        if isinstance(result, (str, Path)):
+            result_path = Path(result)
+            if result_path.is_file():
+                return result_path
 
-        # Wenn sie selbst in output_path geschrieben hat
+        # Wenn nichts zurückgegeben, aber output_path beschrieben wurde
         if output_path.is_file():
             return output_path
 
     except TypeError:
-        # Signatur passt nicht, dann nächste Variante
+        # Signatur akzeptiert offenbar keine 2 Argumente → nächste Variante
         pass
 
-    # 2) Versuche: convert_file(input_path)
-    result = convert_file(str(input_path))
+    # 3) Versuch: convert_file(input_path)
+    result = convert_fn(str(input_path))
 
     if isinstance(result, (str, Path)):
         result_path = Path(result)
         if result_path.is_file():
             return result_path
 
-    # Wenn nichts zurückgegeben wurde, vielleicht in-place überschrieben
+    # Fallback: vielleicht wurde input in-place überschrieben
     if input_path.is_file():
         return input_path
 
     raise RuntimeError(
-        "convert_file hat keine gültige Ausgabedatei erzeugt. "
-        "Bitte prüfe die Implementierung in packliste_core.py."
+        "convert_file aus 'packliste_core.py' hat keine Ausgabedatei erzeugt.\n"
+        "Bitte prüfe die Implementierung."
     )
 
 
-# ---------------------------------
+# -------------------------------------------------------
+# Globale Fehlerbehandlung → IMMER Trace im Browser
+# -------------------------------------------------------
+
+def _format_exception(e: Exception) -> str:
+    return "".join(traceback.format_exception(type(e), e, e.__traceback__))
+
+
+@app.errorhandler(Exception)
+def handle_unhandled_exception(e: Exception):
+    tb = _format_exception(e)
+    app.logger.error("Unerwarteter Fehler:\n%s", tb)
+
+    return (
+        "<h1>Unerwarteter Fehler im Server</h1>"
+        "<p>Details siehe unten. Die gleiche Meldung findest du in den Render-Logs.</p>"
+        f"<pre>{html.escape(tb)}</pre>",
+        500,
+        {"Content-Type": "text/html; charset=utf-8"},
+    )
+
+
+# -------------------------------------------------------
 # Startseite + Upload / Download
-# ---------------------------------
+# -------------------------------------------------------
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
@@ -128,7 +176,7 @@ def index():
             output_filename = f"{base_name}_konvertiert.xlsx"
             output_path = tmpdir / output_filename
 
-            # --- Konvertierung ausführen ---
+            # --- Konvertierung ausführen (nutzt deinen packliste_core) ---
             converted_path = run_conversion(input_path, output_path)
 
             if not converted_path.is_file():
@@ -143,26 +191,28 @@ def index():
                 download_name=converted_path.name,
             )
 
-        except Exception:
-            # Vollständigen Traceback im Browser anzeigen,
-            # damit du auf Render genau siehst, was schiefgeht.
-            tb = traceback.format_exc()
+        except Exception as e:
+            # Explicit: Fehlerseite mit Traceback
+            tb = _format_exception(e)
             app.logger.error("Fehler bei der Konvertierung:\n%s", tb)
 
             return (
                 "<h1>Fehler beim Konvertieren</h1>"
-                "<p>Details siehe unten. "
-                "Die gleiche Fehlermeldung findest du auch in den Render-Logs.</p>"
+                "<p>Details siehe unten. Die gleiche Meldung findest du in den Render-Logs.</p>"
                 f"<pre>{html.escape(tb)}</pre>",
                 500,
                 {"Content-Type": "text/html; charset=utf-8"},
             )
 
     # GET → Formular anzeigen
+    # Wichtig: In templates/index.html muss das File-Feld name="input_file" haben
     return render_template("index.html")
 
 
-# Lokales Testen
+# -------------------------------------------------------
+# Lokaler Start (z.B. python app.py)
+# -------------------------------------------------------
+
 if __name__ == "__main__":
     app.run(
         debug=True,
