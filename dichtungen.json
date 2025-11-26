@@ -1,15 +1,15 @@
 [
   {
     "name": "10/4_B",
-    "always_show": true,
-    "default_value": 300.0,
-    "order": 5
-  },
-  {
-    "name": "10/4_S",
     "always_show": false,
     "default_value": 0.0,
     "order": ""
+  },
+  {
+    "name": "10/4_S",
+    "always_show": true,
+    "default_value": 150.0,
+    "order": 5
   },
   {
     "name": "10/4_W",
@@ -111,7 +111,7 @@
     "name": "GD_S",
     "always_show": true,
     "default_value": 300.0,
-    "order": 4
+    "order": 1
   },
   {
     "name": "GD_W",
@@ -123,7 +123,7 @@
     "name": "Haus_S",
     "always_show": true,
     "default_value": 150.0,
-    "order": 3
+    "order": 4
   },
   {
     "name": "Lebenshilfe Pfeil_S",
@@ -201,7 +201,7 @@
     "name": "Pfeil_S",
     "always_show": true,
     "default_value": 150.0,
-    "order": 2
+    "order": 3
   },
   {
     "name": "Rewe_B",
@@ -225,6 +225,6 @@
     "name": "10/5_S",
     "always_show": true,
     "default_value": 300.0,
-    "order": 1
+    "order": 2
   }
 ]
