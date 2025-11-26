@@ -1,80 +1,103 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="de">
-<head>
-    <meta charset="UTF-8">
-    <title>Packlistenconverter – Zoho CRM</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body>
-
-<div class="page">
-
-    <header class="header">
-        <h1>Packlistenconverter &rarr; Zoho CRM</h1>
-        <p>Excel-Packliste hochladen, serverseitig konvertieren und fertig formatierte Datei herunterladen.</p>
+  <head>
+    <meta charset="utf-8" />
+    <title>Packlistenconverter → Zoho CRM</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/style.css') }}"
+    />
+  </head>
+  <body>
+    <header class="site-header">
+      <h1>Packlistenconverter → Zoho CRM</h1>
+      <p class="subtitle">
+        Excel-Packliste hochladen, serverseitig konvertieren und fertig
+        formatierte Datei herunterladen.
+      </p>
     </header>
 
-    {# Flash-Meldungen (Fehler / Erfolg) #}
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <div class="flash-container">
-          {% for category, message in messages %}
-            <div class="flash flash-{{ category|e }}">
-                {{ message }}
-            </div>
-          {% endfor %}
-        </div>
+    <main class="main-container">
+      {% if error_message %}
+      <div class="alert alert-danger">
+        <strong>Fehler beim Konvertieren</strong><br />
+        {{ error_message }}
+        {% if traceback_str %}
+        <details style="margin-top: 0.5rem;">
+          <summary>Technische Details anzeigen</summary>
+          <pre
+            style="
+              white-space: pre-wrap;
+              font-size: 0.8rem;
+              margin-top: 0.5rem;
+            "
+          >{{ traceback_str }}</pre>
+        </details>
+        {% endif %}
+      </div>
       {% endif %}
-    {% endwith %}
 
-    <main class="main">
-        <section class="card">
-            <h2>Packliste konvertieren</h2>
+      {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+      {% for category, msg in messages %}
+      <div class="alert alert-{{ category }}">{{ msg }}</div>
+      {% endfor %}
+      {% endif %}
+      {% endwith %}
 
-            <form method="post" enctype="multipart/form-data">
-                <div class="form-row">
-                    <label for="input_file">Packlisten-Datei auswählen (*.xlsx / *.xls / *.csv)</label>
-                    <input type="file"
-                           id="input_file"
-                           name="input_file"
-                           accept=".xlsx,.xls,.csv"
-                           required>
-                </div>
+      <section class="card">
+        <h2>Packliste konvertieren</h2>
 
-                <div class="form-row">
-                    <label for="custom_output_name">
-                        Gewünschter Dateiname (optional, ohne .xlsx)
-                    </label>
-                    <input type="text"
-                           id="custom_output_name"
-                           name="custom_output_name"
-                           placeholder="z.B. Packliste_Zoho_20251124">
-                </div>
+        <form method="post" enctype="multipart/form-data" class="form">
+          <label for="input_file">
+            Packlisten-Datei auswählen (*.xlsx / *.xls / *.csv)
+          </label>
+          <input
+            type="file"
+            id="input_file"
+            name="input_file"
+            required
+            accept=".xlsx,.xls,.csv"
+          />
 
-                <div class="form-actions">
-                    <button type="submit" class="btn btn-primary">
-                        Konvertieren &amp; herunterladen
-                    </button>
-                </div>
-            </form>
-        </section>
+          <label for="desired_name">
+            Gewünschter Dateiname (optional, ohne <code>.xlsx</code>)
+          </label>
+          <input
+            type="text"
+            id="desired_name"
+            name="desired_name"
+            placeholder="z.B. {{ default_name or 'Packliste_20250101' }}"
+            value="{{ default_name or '' }}"
+          />
 
-        <section class="card card-info">
-            <h3>Hinweise</h3>
-            <ul>
-                <li>Die Datei wird nur temporär auf dem Server gespeichert und nach der Konvertierung wieder gelöscht.</li>
-                <li>Das Format der ZOHO-Packliste (Spalten, Layout) kommt aus <code>packliste_core.py</code>.</li>
-                <li>Unterstützte Formate: <strong>.xlsx, .xls, .csv</strong>.</li>
-            </ul>
-        </section>
+          <button type="submit" class="btn btn-primary">
+            Konvertieren &amp; herunterladen
+          </button>
+        </form>
+      </section>
+
+      <section class="card hint-card">
+        <h2>Hinweise</h2>
+        <ul>
+          <li>
+            Die Datei wird nur temporär auf dem Server gespeichert und nach der
+            Konvertierung wieder gelöscht.
+          </li>
+          <li>
+            Das Format der ZOHO-Packliste (Spalten, Layout) kommt aus
+            <code>packliste_core.py</code>.
+          </li>
+          <li>
+            Unterstützte Formate: <code>.xlsx</code>, <code>.xls</code>,
+            <code>.csv</code>.
+          </li>
+        </ul>
+      </section>
     </main>
 
-    <footer class="footer">
-        <small>&copy; Packlistenconverter</small>
+    <footer class="site-footer">
+      <small>&copy; Packlistenconverter</small>
     </footer>
-
-</div>
-
-</body>
+  </body>
 </html>
