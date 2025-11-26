@@ -393,10 +393,6 @@ def apply_dicht_name_break(dicht_name: str) -> str:
 # ---------------------------------------------------------------------------
 
 def convert_file(input_path, output_path, user_dichtungen=None, show_message=False):
-    """
-    Web-/Headless-Version deiner Converter-Logik.
-    Sie bildet die EXE-Funktionalität nach, nur ohne GUI.
-    """
     template_path = resource_path(TEMPLATE_FILE)
     if not os.path.isfile(template_path):
         raise FileNotFoundError(
@@ -416,31 +412,33 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
     else:
         df = pd.read_excel(input_path, header=0)
 
-    # 3) Summenzeile abtrennen, Rest nach Datum+Uhrzeit sortieren (falls "Zeitraum" existiert)
+    # 3) Summenzeile abtrennen, Rest nach Datum+Uhrzeit sortieren
     try:
-        if "Zeitraum" in df.columns:
-            sum_row = df.iloc[[0]].copy()
-            data_rows = df.iloc[1:].copy()
+        sum_row = df.iloc[[0]].copy()
+        data_rows = df.iloc[1:].copy()
 
-            def parse_datetime(x):
-                pattern = r'^(\d{1,2}\.\d{1,2}\.\d{4})\s+(\d{1,2}:\d{1,2})'
-                m = re.match(pattern, str(x))
-                if m:
-                    dt_str = f"{m.group(1)} {m.group(2)}"
-                    return pd.to_datetime(
-                        dt_str,
-                        format="%d.%m.%Y %H:%M",
-                        errors="coerce",
-                    )
-                m2 = re.match(r'^(\d{1,2}\.\d{1,2}\.\d{4})', str(x))
-                if m2:
-                    return pd.to_datetime(
-                        m2.group(1),
-                        dayfirst=True,
-                        errors="coerce",
-                    )
-                return pd.NaT
+        def parse_datetime(x):
+            # z.B. "24.11.2025 08:00 - 09:00"
+            pattern = r'^(\d{1,2}\.\d{1,2}\.\d{4})\s+(\d{1,2}:\d{1,2})'
+            m = re.match(pattern, str(x))
+            if m:
+                dt_str = f"{m.group(1)} {m.group(2)}"
+                return pd.to_datetime(
+                    dt_str,
+                    format="%d.%m.%Y %H:%M",
+                    errors="coerce",
+                )
+            # nur Datum
+            m2 = re.match(r'^(\d{1,2}\.\d{1,2}\.\d{4})', str(x))
+            if m2:
+                return pd.to_datetime(
+                    m2.group(1),
+                    dayfirst=True,
+                    errors="coerce",
+                )
+            return pd.NaT
 
+        if "Zeitraum" in data_rows.columns:
             data_rows["ParsedDateTime"] = data_rows["Zeitraum"].apply(
                 parse_datetime
             )
@@ -451,8 +449,6 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
             )
             df = pd.concat([sum_row, data_rows], ignore_index=True)
             df.drop(columns=["ParsedDateTime"], inplace=True, errors="ignore")
-        else:
-            print("Hinweis: Spalte 'Zeitraum' nicht gefunden – keine Sortierung nach Datum/Uhrzeit.")
     except Exception as e:
         print("Fehler beim Sortieren nach Datum/Uhrzeit:", e)
 
@@ -465,10 +461,25 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
     ws = wb.active
     ws.delete_rows(1)
 
-    # 6) Dichtungen sortieren
-    if user_dichtungen is None:
-        user_dichtungen = load_dichtungen()
-    final_dichtungen = final_sort_dichtungen(user_dichtungen, df)
+    # 6) Dichtungen bestimmen
+    dichtungen = user_dichtungen or []
+    # FALLBACK: wenn keine dichtungen.json oder leere Liste -> Spalten aus der Datei verwenden
+    if not dichtungen:
+        main_cols = {
+            "Service Techniker",
+            "Zeitraum",
+            "Dealname",
+            "Weitere Techniker",
+            "Informationen Packliste",
+            "Ersatzteil und Zubehör",
+        }
+        auto_cols = [c for c in df.columns if c not in main_cols]
+        dichtungen = [
+            {"name": c, "always_show": False, "default_value": 0, "order": ""}
+            for c in auto_cols
+        ]
+
+    final_dichtungen = final_sort_dichtungen(dichtungen, df)
 
     # 7) Kopfbereich: Service-Techniker & Zeitraum
     serv_val = safe_val(df, "Service Techniker", 3)
@@ -491,7 +502,7 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
         ("Ersatzteil und Zubehör", 7),  # G
     ]
 
-    # 8) Dichtungs-Spalten: Start bei Platzhalter-Spalte E
+    # 8) Dichtungs-Spalten ab Spalte E
     current_col = PLATZHALTER_COL_INDEX
     first_run = True
     dicht_col_map = {}
@@ -501,14 +512,15 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
         if not dicht_name:
             continue
         is_standard = dicht.get("always_show", False)
+        # Nicht-Standard-Dichtungen nur, wenn Spalte nicht komplett leer
         if (not is_standard) and spalte_leer(df, dicht_name):
             continue
 
         if first_run:
-            used_col = current_col
+            used_col = current_col     # Platzhalter-Spalte E wiederverwenden
             first_run = False
         else:
-            new_col = current_col + 1
+            new_col = current_col + 1  # neue Spalte rechts einfügen
             ws.insert_cols(new_col)
             copy_column_with_style(ws, PLATZHALTER_COL_INDEX, new_col)
             # Mappings anpassen
@@ -518,11 +530,11 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
             used_col = new_col
             current_col = new_col
 
-        # Linker Rand
+        # linker Rand
         set_column_left_border(ws, used_col, start_row=1,
                                border_style="thin")
 
-        # Kopfzeile: Dichtungsname
+        # Kopfzelle Dichtungsname
         mod_name = apply_dicht_name_break(dicht_name)
         head_cell = ws.cell(
             row=TEMPLATE_DICHTUNG_NAME_ROW,
@@ -536,7 +548,7 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
             wrap_text=True,
         )
 
-        # Summenzeile oben
+        # Summenwert in Zeile 1
         sum_val_raw = safe_val(df, dicht_name, DF_SUM_ROW)
         sum_num = parse_number(sum_val_raw)
         sum_cell = ws.cell(
@@ -554,7 +566,7 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
 
         dicht_col_map[dicht_name] = used_col
 
-    # Dünne Linie unter die Dichtungsnamen
+    # Linie unter den Dichtungsnamen
     set_bottom_solid(ws, TEMPLATE_DICHTUNG_NAME_ROW)
 
     # 9) Datenzeilen füllen
@@ -565,14 +577,11 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
         copy_entire_row_format(ws, TEMPLATE_DATA_START_ROW, t_row)
 
         row_num = df_row
-
-        # Nummerierung in Spalte A
+        # Laufende Nummer in Spalte A
         num_cell = ws.cell(row=t_row, column=NUMBERING_COL, value=row_num)
         num_cell.font = Font(name="Calibri", size=12, bold=True)
         num_cell.alignment = Alignment(
-            horizontal="right",
-            vertical="top",
-            wrap_text=True,
+            horizontal="right", vertical="top", wrap_text=True
         )
 
         # Hauptfelder
@@ -581,25 +590,9 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
             cell = ws.cell(row=t_row, column=tmplt_col)
 
             if df_col == "Zeitraum":
-                val = transform_zeitraum(val)
-                if RICH_TEXT_AVAILABLE and val:
-                    parts = val.split(" ", 1)
-                    if len(parts) == 2:
-                        wtag, rest = parts
-                        rest = " " + rest
-                    else:
-                        wtag = val
-                        rest = ""
-                    bold_inline = InlineFont(rFont="Calibri", sz=12, b=True)
-                    normal_inline = InlineFont(rFont="Calibri", sz=12, b=False)
-                    rt = CellRichText()
-                    rt.append(TextBlock(bold_inline, wtag))
-                    rt.append(TextBlock(normal_inline, rest))
-                    cell.value = rt
-                else:
-                    cell.value = val
-                    # Fallback: alles fett
-                    cell.font = Font(name="Calibri", size=12, bold=True)
+                # hier der fertige String (kein RichText nötig)
+                cell.value = val
+                cell.font = Font(name="Calibri", size=12, bold=True)
             else:
                 cell.value = val
                 if df_col in [
@@ -664,7 +657,7 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
 
         t_row += 1
 
-    # 10) "zusätzliche Dichtungen"-Zeile
+    # 10) "zusätzliche Dichtungen"-Zeile (ohne Extra-Logik)
     extra_line_row = t_row
     ws.insert_rows(idx=extra_line_row)
     copy_entire_row_format(ws, TEMPLATE_DATA_START_ROW, extra_line_row)
@@ -688,40 +681,6 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
         ws.cell(row=extra_line_row, column=col_idx).fill = PatternFill(
             "solid",
             fgColor=bg_color,
-        )
-
-    # Standard-Dichtungen vorbelegen
-    for dicht in final_dichtungen:
-        if not dicht.get("always_show", False):
-            continue
-        fix_value = dicht.get("default_value", 0)
-        try:
-            fix_value_num = float(fix_value)
-        except Exception:
-            fix_value_num = 0.0
-        col_idx = dicht_col_map.get(dicht.get("name"))
-        if col_idx is None:
-            continue
-        c = ws.cell(row=extra_line_row, column=col_idx, value=fix_value_num)
-        c.number_format = "0"
-        c.alignment = Alignment(
-            horizontal="center", vertical="top", wrap_text=True
-        )
-        c.font = Font(name="Calibri", size=12, bold=False)
-
-        old_sum = ws.cell(row=TEMPLATE_SUM_ROW, column=col_idx).value
-        old_sum = old_sum if isinstance(old_sum, (int, float)) else 0
-        new_sum = old_sum + fix_value_num
-        s_cell = ws.cell(row=TEMPLATE_SUM_ROW,
-                         column=col_idx, value=new_sum)
-        s_cell.number_format = "0"
-        s_cell.font = Font(
-            name="Calibri", size=16, bold=False, color="FF0000"
-        )
-        s_cell.alignment = Alignment(
-            horizontal="center",
-            vertical="top",
-            wrap_text=True,
         )
 
     # 11) Spaltenbreiten Infos/Ersatzteile zurücksetzen
@@ -778,3 +737,5 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
         os.remove(temp_copy_path)
 
     return output_path
+
+
