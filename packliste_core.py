@@ -14,7 +14,7 @@ from copy import copy
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
 
-# Rich-Text (fetter Wochentag) – fallback, falls openpyxl das nicht kann
+# Rich-Text (fetter Wochentag) – optional, falls vorhanden
 try:
     from openpyxl.cell.text import InlineFont
     from openpyxl.cell.rich_text import TextBlock, CellRichText
@@ -71,6 +71,10 @@ DEFAULT_DICHTUNGEN = []
 # ---------------------------------------------------------------------------
 
 def load_dichtungen():
+    """
+    Liest dichtungen.json aus demselben Ordner wie dieses Skript.
+    Struktur wie in der EXE: Liste von Dicts mit name/always_show/default_value/order.
+    """
     path = resource_path(DICHTUNGEN_CONFIG)
     if not os.path.exists(path):
         save_dichtungen(DEFAULT_DICHTUNGEN)
@@ -330,14 +334,22 @@ def set_column_left_border(ws, col_idx, start_row=3, border_style="thin"):
         cell.border = b
 
 
-def set_bottom_solid(ws, row_idx):
-    side = Side(style="thin", color="000000")
-    max_col = ws.max_column
+def set_bottom_solid(ws, row_index):
+    """
+    Zeichnet eine durchgehende untere Rahmenlinie in der angegebenen Zeile.
+    Wird u.a. für die Zeile TEMPLATE_DICHTUNG_NAME_ROW verwendet.
+    """
+    thin = Side(style="thin", color="000000")
+    max_col = ws.max_column or 1
     for col_idx in range(1, max_col + 1):
-        c = ws.cell(row=row, column=col_idx)
-        b = copy(c.border) or Border()
-        b.bottom = side
-        c.border = b
+        c = ws.cell(row=row_index, column=col_idx)
+        old = c.border or Border()
+        c.border = Border(
+            left=old.left,
+            right=old.right,
+            top=old.top,
+            bottom=thin,
+        )
 
 
 def remove_trailing_blank_rows(ws, start_row):
@@ -380,9 +392,10 @@ def apply_dicht_name_break(dicht_name: str) -> str:
 # Zentrale Konvertier-Funktion (Web / Headless)
 # ---------------------------------------------------------------------------
 
-def convert_file(input_path, output_path, user_dichtungen, show_message=False):
+def convert_file(input_path, output_path, user_dichtungen=None, show_message=False):
     """
     Web-/Headless-Version deiner Converter-Logik.
+    Sie bildet die EXE-Funktionalität nach, nur ohne GUI.
     """
     template_path = resource_path(TEMPLATE_FILE)
     if not os.path.isfile(template_path):
@@ -403,40 +416,43 @@ def convert_file(input_path, output_path, user_dichtungen, show_message=False):
     else:
         df = pd.read_excel(input_path, header=0)
 
-    # 3) Summenzeile abtrennen, Rest nach Datum+Uhrzeit sortieren
+    # 3) Summenzeile abtrennen, Rest nach Datum+Uhrzeit sortieren (falls "Zeitraum" existiert)
     try:
-        sum_row = df.iloc[[0]].copy()
-        data_rows = df.iloc[1:].copy()
+        if "Zeitraum" in df.columns:
+            sum_row = df.iloc[[0]].copy()
+            data_rows = df.iloc[1:].copy()
 
-        def parse_datetime(x):
-            pattern = r'^(\d{1,2}\.\d{1,2}\.\d{4})\s+(\d{1,2}:\d{1,2})'
-            m = re.match(pattern, str(x))
-            if m:
-                dt_str = f"{m.group(1)} {m.group(2)}"
-                return pd.to_datetime(
-                    dt_str,
-                    format="%d.%m.%Y %H:%M",
-                    errors="coerce",
-                )
-            m2 = re.match(r'^(\d{1,2}\.\d{1,2}\.\d{4})', str(x))
-            if m2:
-                return pd.to_datetime(
-                    m2.group(1),
-                    dayfirst=True,
-                    errors="coerce",
-                )
-            return pd.NaT
+            def parse_datetime(x):
+                pattern = r'^(\d{1,2}\.\d{1,2}\.\d{4})\s+(\d{1,2}:\d{1,2})'
+                m = re.match(pattern, str(x))
+                if m:
+                    dt_str = f"{m.group(1)} {m.group(2)}"
+                    return pd.to_datetime(
+                        dt_str,
+                        format="%d.%m.%Y %H:%M",
+                        errors="coerce",
+                    )
+                m2 = re.match(r'^(\d{1,2}\.\d{1,2}\.\d{4})', str(x))
+                if m2:
+                    return pd.to_datetime(
+                        m2.group(1),
+                        dayfirst=True,
+                        errors="coerce",
+                    )
+                return pd.NaT
 
-        data_rows["ParsedDateTime"] = data_rows["Zeitraum"].apply(
-            parse_datetime
-        )
-        data_rows.sort_values(
-            by="ParsedDateTime",
-            ascending=True,
-            inplace=True,
-        )
-        df = pd.concat([sum_row, data_rows], ignore_index=True)
-        df.drop(columns=["ParsedDateTime"], inplace=True, errors="ignore")
+            data_rows["ParsedDateTime"] = data_rows["Zeitraum"].apply(
+                parse_datetime
+            )
+            data_rows.sort_values(
+                by="ParsedDateTime",
+                ascending=True,
+                inplace=True,
+            )
+            df = pd.concat([sum_row, data_rows], ignore_index=True)
+            df.drop(columns=["ParsedDateTime"], inplace=True, errors="ignore")
+        else:
+            print("Hinweis: Spalte 'Zeitraum' nicht gefunden – keine Sortierung nach Datum/Uhrzeit.")
     except Exception as e:
         print("Fehler beim Sortieren nach Datum/Uhrzeit:", e)
 
@@ -450,6 +466,8 @@ def convert_file(input_path, output_path, user_dichtungen, show_message=False):
     ws.delete_rows(1)
 
     # 6) Dichtungen sortieren
+    if user_dichtungen is None:
+        user_dichtungen = load_dichtungen()
     final_dichtungen = final_sort_dichtungen(user_dichtungen, df)
 
     # 7) Kopfbereich: Service-Techniker & Zeitraum
@@ -536,31 +554,26 @@ def convert_file(input_path, output_path, user_dichtungen, show_message=False):
 
         dicht_col_map[dicht_name] = used_col
 
-    # Dünne Linie unter den Dichtungsbezeichnungen
-    # in packliste_core.py – alte set_bottom_solid-Funktion vollständig ersetzen
-from openpyxl.styles import Border, Side  # falls oben schon importiert, doppelt egal
+    # Dünne Linie unter die Dichtungsnamen
+    set_bottom_solid(ws, TEMPLATE_DICHTUNG_NAME_ROW)
 
+    # 9) Datenzeilen füllen
+    t_row = TEMPLATE_DATA_START_ROW
+    for df_row in range(DF_DATA_START_ROW, len(df)):
+        if t_row > ws.max_row:
+            ws.insert_rows(idx=t_row)
+        copy_entire_row_format(ws, TEMPLATE_DATA_START_ROW, t_row)
 
-def set_bottom_solid(ws, row_index):
-    """
-    Zeichnet eine durchgehende untere Rahmenlinie in der angegebenen Zeile.
-    Wird u.a. für die Zeile TEMPLATE_DICHTUNG_NAME_ROW verwendet.
-    """
-    thin = Side(style="thin", color="000000")
+        row_num = df_row
 
-    max_col = ws.max_column or 1
-
-    for col_idx in range(1, max_col + 1):
-        c = ws.cell(row=row_index, column=col_idx)
-
-        old = c.border or Border()
-        c.border = Border(
-            left=old.left,
-            right=old.right,
-            top=old.top,
-            bottom=thin,
+        # Nummerierung in Spalte A
+        num_cell = ws.cell(row=t_row, column=NUMBERING_COL, value=row_num)
+        num_cell.font = Font(name="Calibri", size=12, bold=True)
+        num_cell.alignment = Alignment(
+            horizontal="right",
+            vertical="top",
+            wrap_text=True,
         )
-
 
         # Hauptfelder
         for (df_col, tmplt_col) in global_mainfield:
@@ -585,6 +598,7 @@ def set_bottom_solid(ws, row_index):
                     cell.value = rt
                 else:
                     cell.value = val
+                    # Fallback: alles fett
                     cell.font = Font(name="Calibri", size=12, bold=True)
             else:
                 cell.value = val
@@ -764,4 +778,3 @@ def set_bottom_solid(ws, row_index):
         os.remove(temp_copy_path)
 
     return output_path
-
