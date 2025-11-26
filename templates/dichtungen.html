@@ -2,229 +2,278 @@
 <html lang="de">
 <head>
   <meta charset="utf-8">
-  <title>Dichtungen verwalten – Packlistenconverter</title>
+  <title>Dichtungen einstellen – Packlistenconverter</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
 
   <style>
-    body {
-      margin: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #111;
-      color: #eee;
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      background:#111;
+      color:#eee;
     }
-    header {
-      padding: 16px 24px;
-      background: #000;
-      border-bottom: 1px solid #333;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+    header{
+      padding:16px 24px;
+      background:#000;
+      border-bottom:1px solid #333;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
     }
-    header h1 {
-      margin: 0;
-      font-size: 20px;
+    header h1{
+      margin:0;
+      font-size:20px;
     }
-    header a {
-      color: #9ad4ff;
-      text-decoration: none;
-      margin-left: 16px;
+    .header-actions{
+      display:flex;
+      gap:10px;
+      align-items:center;
     }
-    main {
-      max-width: 960px;
-      margin: 32px auto;
-      padding: 24px;
-      background: #1c1c1c;
-      border-radius: 12px;
-      box-shadow: 0 10px 30px rgba(0,0,0,.7);
+    .btn{
+      border:none;
+      border-radius:4px;
+      padding:8px 12px;
+      cursor:pointer;
+      font-size:14px;
+      text-decoration:none;
+      display:inline-block;
     }
-    h2 {
-      margin-top: 0;
-      margin-bottom: 8px;
-    }
-    p.subtitle {
-      margin-top: 0;
-      color: #aaa;
-      font-size: 14px;
-    }
+    .btn-primary{background:#2ecc71;color:#000;}
+    .btn-secondary{background:#444;color:#eee;}
+    .btn-danger{background:#c0392b;color:#fff;}
+    .btn-xs{padding:4px 8px;font-size:12px;}
 
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 16px;
-      font-size: 14px;
+    main{
+      max-width:960px;
+      margin:32px auto;
+      padding:0 16px 32px;
     }
-    th, td {
-      border: 1px solid #333;
-      padding: 6px 8px;
+    .card{
+      background:#1c1c1c;
+      border-radius:12px;
+      padding:24px;
+      box-shadow:0 10px 30px rgba(0,0,0,.7);
     }
-    th {
-      background: #222;
-      text-align: left;
+    .card h2{
+      margin-top:0;
+      margin-bottom:4px;
     }
-    tr:nth-child(even) td {
-      background: #181818;
+    .card p.subtitle{
+      margin-top:0;
+      color:#aaa;
+      font-size:14px;
+    }
+    table{
+      width:100%;
+      border-collapse:collapse;
+      margin-top:16px;
+      font-size:13px;
+    }
+    th,td{
+      border:1px solid #333;
+      padding:6px 8px;
+      text-align:left;
+    }
+    th{
+      background:#222;
     }
     input[type="text"],
-    input[type="number"] {
-      width: 100%;
-      box-sizing: border-box;
-      padding: 4px 6px;
-      border-radius: 4px;
-      border: 1px solid #444;
-      background: #111;
-      color: #eee;
-      font-size: 13px;
+    input[type="number"]{
+      width:100%;
+      box-sizing:border-box;
+      padding:4px 6px;
+      border-radius:4px;
+      border:1px solid #444;
+      background:#111;
+      color:#eee;
+      font-size:13px;
     }
-    input[type="checkbox"] {
-      transform: scale(1.1);
+    input[type="checkbox"]{
+      transform:scale(1.1);
     }
-    .actions {
-      margin-top: 16px;
-      display: flex;
-      gap: 12px;
+    .actions-row{
+      margin-top:16px;
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      flex-wrap:wrap;
     }
-    .btn {
-      border: none;
-      border-radius: 4px;
-      padding: 8px 14px;
-      cursor: pointer;
-      font-size: 14px;
-    }
-    .btn-primary {
-      background: #2ecc71;
-      color: #000;
-    }
-    .btn-secondary {
-      background: #444;
-      color: #eee;
-    }
-    .btn-small {
-      padding: 4px 10px;
-      font-size: 13px;
-    }
-    .flash {
-      margin-top: 8px;
-      padding: 8px 10px;
-      border-radius: 4px;
-      font-size: 13px;
-    }
-    .flash-success {
-      background: #1f4f2d;
-      color: #d6ffe4;
-      border: 1px solid #2ecc71;
-    }
-    .flash-error {
-      background: #4f1f1f;
-      color: #ffe0e0;
-      border: 1px solid #e74c3c;
+    .hint{
+      margin-top:18px;
+      font-size:12px;
+      color:#aaa;
     }
   </style>
 </head>
 <body>
 
 <header>
-  <h1>Packlistenconverter → Zoho CRM</h1>
-  <div>
-    <a href="{{ url_for('index') }}">← Zurück zur Konvertierung</a>
+  <h1>Dichtungen einstellen</h1>
+  <div class="header-actions">
+    <a href="{{ url_for('index') }}" class="btn btn-secondary">← Zurück zum Converter</a>
   </div>
 </header>
 
 <main>
-  <h2>Dichtungen verwalten</h2>
-  <p class="subtitle">
-    Hier kannst du Dichtungen hinzufügen, bearbeiten, Standard-Dichtungen festlegen
-    und die Reihenfolge bestimmen. Alles wird in <code>dichtungen.json</code> gespeichert.
-  </p>
+  <div class="card">
+    <h2>Dichtungen verwalten</h2>
+    <p class="subtitle">
+      Hier kannst du Dichtungen anlegen, Standard-Dichtungen markieren,
+      Standard-Werte und Reihenfolge festlegen.
+    </p>
 
-  {# Flash-Meldungen anzeigen #}
-  {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-      {% for category, msg in messages %}
-        <div class="flash flash-{{ 'success' if category == 'success' else 'error' }}">
-          {{ msg }}
-        </div>
-      {% endfor %}
-    {% endif %}
-  {% endwith %}
-
-  <form method="post">
     <table>
       <thead>
         <tr>
-          <th style="width: 45%;">Name (Spaltenname)</th>
-          <th style="width: 10%;">Standard?</th>
-          <th style="width: 20%;">Standardwert</th>
-          <th style="width: 15%;">Reihenfolge</th>
-          <th style="width: 10%;">Löschen</th>
+          <th style="width:40%;">Name der Dichtung</th>
+          <th style="width:12%;">Standard?</th>
+          <th style="width:18%;">Standard-Wert</th>
+          <th style="width:15%;">Reihenfolge</th>
+          <th style="width:15%;">Aktion</th>
         </tr>
       </thead>
-      <tbody id="dichtungen-rows">
-        {% for d in dichtungen %}
-          <tr>
-            <td>
-              <input type="hidden" name="row_ids" value="{{ d.row_id }}">
-              <input type="text" name="name_{{ d.row_id }}" value="{{ d.name }}">
-            </td>
-            <td style="text-align:center;">
-              <input type="checkbox" name="always_show_{{ d.row_id }}"
-                     {% if d.always_show %}checked{% endif %}>
-            </td>
-            <td>
-              <input type="number" step="1" name="default_value_{{ d.row_id }}"
-                     value="{{ d.default_value }}">
-            </td>
-            <td>
-              <input type="number" step="1" name="order_{{ d.row_id }}"
-                     value="{{ d.order }}">
-            </td>
-            <td style="text-align:center;">
-              <input type="checkbox" name="delete_{{ d.row_id }}">
-            </td>
-          </tr>
-        {% endfor %}
+      <tbody id="dichtungen-body">
+        <!-- Reihen werden von JS aufgebaut -->
       </tbody>
     </table>
 
-    <div class="actions">
-      <button type="button" class="btn btn-secondary btn-small"
-              onclick="addRow()">
-        + Neue Dichtung
+    <div class="actions-row">
+      <button type="button" id="add-row" class="btn btn-secondary">
+        + Neue Dichtung hinzufügen
       </button>
-      <button type="submit" class="btn btn-primary">
-        Speichern
+      <button type="button" id="save" class="btn btn-primary">
+        Dichtungen speichern
       </button>
     </div>
-  </form>
+
+    <div class="hint">
+      <strong>Hinweis:</strong> Die Einstellungen werden in <code>dichtungen.json</code>
+      im Projektordner gespeichert. Diese Datei wird automatisch erzeugt, wenn du das
+      erste Mal speicherst.
+    </div>
+  </div>
 </main>
 
 <script>
-  let nextIndex = {{ dichtungen|length }};
+  // Daten vom Server (Liste aus packliste_core.load_dichtungen)
+  const initialData = {{ dichtungen | tojson }};
 
-  function addRow() {
-    const tbody = document.getElementById("dichtungen-rows");
+  const tbody = document.getElementById("dichtungen-body");
+
+  function createRow(data) {
     const tr = document.createElement("tr");
-    const idx = nextIndex++;
 
-    tr.innerHTML = `
-      <td>
-        <input type="hidden" name="row_ids" value="${idx}">
-        <input type="text" name="name_${idx}">
-      </td>
-      <td style="text-align:center;">
-        <input type="checkbox" name="always_show_${idx}">
-      </td>
-      <td>
-        <input type="number" step="1" name="default_value_${idx}" value="0">
-      </td>
-      <td>
-        <input type="number" step="1" name="order_${idx}">
-      </td>
-      <td style="text-align:center;">
-        <input type="checkbox" name="delete_${idx}">
-      </td>
-    `;
+    // Name
+    const tdName = document.createElement("td");
+    const inpName = document.createElement("input");
+    inpName.type = "text";
+    inpName.className = "fld-name";
+    inpName.value = data.name || "";
+    tdName.appendChild(inpName);
+    tr.appendChild(tdName);
+
+    // Standard? (always_show)
+    const tdStd = document.createElement("td");
+    tdStd.style.textAlign = "center";
+    const cbStd = document.createElement("input");
+    cbStd.type = "checkbox";
+    cbStd.className = "fld-std";
+    cbStd.checked = !!data.always_show;
+    tdStd.appendChild(cbStd);
+    tr.appendChild(tdStd);
+
+    // Standard-Wert
+    const tdDef = document.createElement("td");
+    const inpDef = document.createElement("input");
+    inpDef.type = "number";
+    inpDef.step = "1";
+    inpDef.className = "fld-default";
+    inpDef.value = (data.default_value !== undefined && data.default_value !== null)
+      ? data.default_value
+      : 0;
+    tdDef.appendChild(inpDef);
+    tr.appendChild(tdDef);
+
+    // Reihenfolge
+    const tdOrder = document.createElement("td");
+    const inpOrder = document.createElement("input");
+    inpOrder.type = "number";
+    inpOrder.step = "1";
+    inpOrder.className = "fld-order";
+    inpOrder.value = (data.order !== undefined && data.order !== null)
+      ? data.order
+      : "";
+    tdOrder.appendChild(inpOrder);
+    tr.appendChild(tdOrder);
+
+    // Aktion: Löschen-Button
+    const tdActions = document.createElement("td");
+    tdActions.style.textAlign = "center";
+    const btnDel = document.createElement("button");
+    btnDel.type = "button";
+    btnDel.textContent = "Löschen";
+    btnDel.className = "btn btn-danger btn-xs";
+    btnDel.addEventListener("click", () => {
+      tr.remove();
+    });
+    tdActions.appendChild(btnDel);
+    tr.appendChild(tdActions);
+
     tbody.appendChild(tr);
   }
+
+  // Initiale Zeilen aufbauen
+  if (initialData && Array.isArray(initialData) && initialData.length > 0) {
+    initialData.forEach(d => createRow(d));
+  } else {
+    // mindestens eine leere Zeile anzeigen
+    createRow({name:"", always_show:false, default_value:0, order:""});
+  }
+
+  // Neue Dichtung hinzufügen
+  document.getElementById("add-row").addEventListener("click", () => {
+    createRow({name:"", always_show:false, default_value:0, order:""});
+  });
+
+  // Speichern
+  document.getElementById("save").addEventListener("click", async () => {
+    const rows = [];
+    tbody.querySelectorAll("tr").forEach(tr => {
+      const name = tr.querySelector(".fld-name").value.trim();
+      if (!name) return; // leere Zeilen ignorieren
+
+      const alwaysShow = tr.querySelector(".fld-std").checked;
+      const defValRaw = tr.querySelector(".fld-default").value;
+      const orderRaw = tr.querySelector(".fld-order").value;
+
+      let defVal = parseFloat(defValRaw.toString().replace(",", "."));
+      if (isNaN(defVal)) defVal = 0;
+
+      rows.push({
+        name: name,
+        always_show: alwaysShow,
+        default_value: defVal,
+        order: orderRaw ? parseInt(orderRaw, 10) : ""
+      });
+    });
+
+    try {
+      const resp = await fetch("{{ url_for('manage_dichtungen') }}", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({dichtungen: rows})
+      });
+      const data = await resp.json();
+      if (data && data.ok) {
+        alert("Dichtungen wurden gespeichert.");
+      } else {
+        alert("Fehler beim Speichern der Dichtungen.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Netzwerkfehler beim Speichern.");
+    }
+  });
 </script>
 
 </body>
