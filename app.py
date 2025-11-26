@@ -1,22 +1,24 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import os
-import tempfile
-from datetime import date
-from pathlib import Path
-
-import pandas as pd
 from flask import (
     Flask,
     render_template,
     request,
     send_file,
-    jsonify,
+    flash,
+    redirect,
+    url_for,
+    jsonify,          # NEU
 )
 from werkzeug.utils import secure_filename
+import tempfile
 
-from packliste_core import convert_file, load_dichtungen, save_dichtungen
+from packliste_core import (
+    convert_file,
+    load_dichtungen,  # NEU
+    save_dichtungen,  # NEU
+)
 
 # -------------------------------------------------------
 # Flask-App
@@ -182,6 +184,81 @@ def manage_dichtungen():
     else:
         user_dichtungen = load_dichtungen()
         return render_template("dichtungen.html", dichtungen=user_dichtungen)
+
+# -------------------------------------------------------
+# Dichtungs-Einstellungen (Seite)
+# -------------------------------------------------------
+
+@app.route("/dichtungen", methods=["GET"])
+def dichtungen_page():
+    """
+    Zeigt die Dichtungsverwaltungs-Seite.
+    Das Template heißt 'dichtungen.html'.
+    """
+    return render_template("dichtungen.html")
+
+
+# -------------------------------------------------------
+# Dichtungs-API (für das Frontend-JS)
+# -------------------------------------------------------
+
+@app.route("/api/dichtungen", methods=["GET", "POST"])
+def api_dichtungen():
+    # --- aktuelle Konfiguration laden ---
+    if request.method == "GET":
+        items = load_dichtungen()
+        return jsonify({"success": True, "items": items})
+
+    # --- neue Konfiguration speichern ---
+    data = request.get_json(silent=True) or {}
+    raw_items = data.get("items")
+
+    if not isinstance(raw_items, list):
+        return jsonify({"success": False, "error": "invalid_payload"}), 400
+
+    cleaned = []
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+
+        name = str(item.get("name", "")).strip()
+        if not name:
+            continue
+
+        # Standard-Haken
+        always_show = bool(item.get("always_show"))
+
+        # Standardwert (Zahl, sonst 0)
+        default_value = item.get("default_value", 0)
+        try:
+            default_value = float(default_value)
+        except Exception:
+            default_value = 0.0
+
+        # Reihenfolge (optional int oder "")
+        order_raw = str(item.get("order", "")).strip()
+        if order_raw:
+            try:
+                order = int(order_raw)
+            except Exception:
+                order = ""
+        else:
+            order = ""
+
+        cleaned.append(
+            {
+                "name": name,
+                "always_show": always_show,
+                "default_value": default_value,
+                "order": order,
+            }
+        )
+
+    # In dichtungen.json schreiben
+    save_dichtungen(cleaned)
+
+    # Zurückgeben, was jetzt gespeichert ist
+    return jsonify({"success": True, "items": load_dichtungen()})
 
 
 if __name__ == "__main__":
