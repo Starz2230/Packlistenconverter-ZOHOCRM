@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import os
 import re
 import json
@@ -42,6 +45,9 @@ weekday_map = {
     5: "SA",
     6: "SO",
 }
+
+# Default-Liste, falls noch keine JSON vorhanden ist
+DEFAULT_DICHTUNGEN = []
 
 
 def resource_path(relative_path: str) -> str:
@@ -146,7 +152,7 @@ def spalte_leer(df, colname):
 
 
 # ------------------------------------------------------------
-# Sortierlogik für Dichtungen (wie im Original)
+# Sortierlogik für Dichtungen
 # ------------------------------------------------------------
 
 def parse_numeric_part(name: str) -> float:
@@ -341,35 +347,28 @@ def apply_dicht_name_break(name: str) -> str:
     """
     Versucht, Dichtungsnamen sinnvoll in max. 2 Zeilen umzubrechen.
 
-    - Wenn '_' vorhanden: Umbruch dort (z.B. '10/5_S' -> '10/5\\nS').
+    - Wenn '_' vorhanden: Umbruch dort (z.B. '10/5_S' -> '10/5\nS').
     - Sonst, wenn Leerzeichen vorhanden: Umbruch zwischen Wörtern
-      (z.B. 'Omega klebend' -> 'Omega\\nklebend').
+      (z.B. 'Omega klebend' -> 'Omega\nklebend').
     - Sonst: String ungefähr in der Mitte trennen.
     """
     if not name:
         return ""
     name = str(name).strip()
 
-    # Unterstrich: z.B. "10/5_S" -> "10/5\nS"
     if "_" in name:
         left, right = name.split("_", 1)
         return left + "\n" + right
 
-    # Mehrere Wörter: z.B. "Omega klebend" -> "Omega\nklebend"
     parts = name.split()
     if len(parts) == 1:
-        # Ein einzelnes Wort, ggf. in der Mitte umbrechen
         if len(name) <= 8:
             return name
         half = math.ceil(len(name) / 2)
         return name[:half] + "\n" + name[half:]
     else:
-        # Zwei oder mehr Wörter:
-        # Versuche, erste Hälfte der Wörter in Zeile 1,
-        # Rest in Zeile 2.
         if len(parts) == 2:
             return parts[0] + "\n" + parts[1]
-        # Mehr als 2 Wörter -> so mittig wie möglich teilen
         mid = math.ceil(len(parts) / 2)
         line1 = " ".join(parts[:mid])
         line2 = " ".join(parts[mid:])
@@ -393,8 +392,21 @@ def adjust_dichtung_column_widths(ws, dicht_col_map, max_width=12, min_width=6):
 
 
 # ------------------------------------------------------------
-# Laden der Dichtungen
+# Laden / Speichern der Dichtungen
 # ------------------------------------------------------------
+
+def save_dichtungen(dichtungen_list):
+    """
+    Speichert die Dichtungen im JSON-Format.
+    Wird von der Web-Oberfläche aufgerufen.
+    """
+    path = resource_path(DICHTUNGEN_CONFIG)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(dichtungen_list, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print("Fehler beim Speichern der Dichtungen:", e)
+
 
 def load_dichtungen():
     """
@@ -403,19 +415,21 @@ def load_dichtungen():
     """
     path = resource_path(DICHTUNGEN_CONFIG)
     if not os.path.exists(path):
-        return []
+        return DEFAULT_DICHTUNGEN.copy()
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
     except Exception as e:
         print("Fehler beim Laden der Dichtungen:", e)
-        return []
+        return DEFAULT_DICHTUNGEN.copy()
     normalized = []
     for item in data:
         if isinstance(item, dict):
             normalized.append(item)
         else:
-            normalized.append({"name": item, "always_show": False, "default_value": 0, "order": ""})
+            normalized.append(
+                {"name": item, "always_show": False, "default_value": 0, "order": ""}
+            )
     return normalized
 
 
@@ -438,7 +452,12 @@ def guess_dichtungen_from_df(df):
             continue
         if spalte_leer(df, col):
             continue
-        candidates.append({"name": col, "always_show": True, "default_value": 0, "order": ""})
+        candidates.append({
+            "name": col,
+            "always_show": True,
+            "default_value": 0,
+            "order": ""
+        })
     return candidates
 
 
@@ -552,11 +571,11 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
         name = dicht.get("name")
         if not name:
             continue
-        # "Tag" wollen wir nicht als Dichtung anzeigen
+        # "Tag" nicht als Dichtung anzeigen
         if str(name).strip().lower() == "tag":
             continue
         is_standard = dicht.get("always_show", False)
-        # Nicht-Standard-Dichtungen nur anzeigen, wenn es Werte gibt
+        # Nicht-Standard-Dichtungen nur anzeigen, wenn Werte vorhanden
         if (not is_standard) and spalte_leer(df, name):
             continue
 
@@ -577,7 +596,7 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
         # linke Rahmenlinie
         set_column_left_border(ws, used_col, start_row=1, border_style="thin")
 
-        # Umbrechen des Namens in max. 2 Zeilen
+        # Überschrift mit sinnvollem Zeilenumbruch
         mod_name = apply_dicht_name_break(name)
         head_cell = ws.cell(row=TEMPLATE_DICHTUNG_NAME_ROW, column=used_col, value=mod_name)
         head_cell.font = Font(name="Calibri", size=12, bold=True)
@@ -677,7 +696,7 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
     for col_idx in range(1, ws.max_column + 1):
         ws.cell(row=extra_line_row, column=col_idx).fill = PatternFill("solid", fgColor=bg_color)
 
-    # Standard-Dichtungen in der zusätzlichen Zeile vorbelegen
+    # 12) Standard-Dichtungen in der zusätzlichen Zeile vorbelegen
     for dicht in final_dichtungen:
         if not dicht.get("always_show", False):
             continue
@@ -703,15 +722,17 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
         s_cell.font = Font(name="Calibri", size=16, bold=False, color="FF0000")
         s_cell.alignment = Alignment(horizontal="center", vertical="top", wrap_text=True)
 
-    # 12) Info/Ersatzteil-Spaltenbreite aus Template übernehmen
-    for field, orig_width in [("Informationen Packliste", original_width_info),
-                              ("Ersatzteil und Zubehör", original_width_ersatz)]:
+    # 13) Info/Ersatzteil-Spaltenbreite aus Template übernehmen
+    for field, orig_width in [
+        ("Informationen Packliste", original_width_info),
+        ("Ersatzteil und Zubehör", original_width_ersatz),
+    ]:
         col_idx = next((col for df_field, col in global_mainfield if df_field == field), None)
         if col_idx is not None and orig_width:
             col_letter = get_column_letter(col_idx)
             ws.column_dimensions[col_letter].width = orig_width
 
-    # 13) Bestimmte Spalten ausblenden, wenn sie komplett leer sind
+    # 14) Bestimmte Spalten ausblenden, wenn sie komplett leer sind
     for field in ["Weitere Techniker", "Informationen Packliste", "Ersatzteil und Zubehör"]:
         col_idx = next((col for (df_field, col) in global_mainfield if df_field == field), None)
         if col_idx is None:
@@ -722,10 +743,10 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
         else:
             ws.column_dimensions[col_letter].hidden = False
 
-    # 14) Leere Zeilen am Ende entfernen
+    # 15) Leere Zeilen am Ende entfernen
     remove_trailing_blank_rows(ws, extra_line_row)
 
-    # 15) Schriftfarbe der Dichtungs-Spalten alternierend blau/schwarz
+    # 16) Schriftfarbe der Dichtungs-Spalten alternierend blau/schwarz
     BLUE_COLOR = "0000FF"
     BLACK_COLOR = "000000"
     dicht_spalten_sorted = sorted(dicht_col_map.values())
@@ -737,10 +758,10 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
             new_font.color = font_color
             cell.font = new_font
 
-    # 16) Dichtungs-Spaltenbreiten anpassen
+    # 17) Dichtungs-Spaltenbreiten anpassen
     adjust_dichtung_column_widths(ws, dicht_col_map)
 
-    # 17) Speichern
+    # 18) Speichern
     wb.save(output_path)
     wb.close()
     if os.path.exists(temp_copy_path):
