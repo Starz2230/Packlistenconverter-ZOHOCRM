@@ -2,6 +2,7 @@ import os
 import tempfile
 import traceback
 from pathlib import Path
+from typing import Optional
 
 from flask import (
     Flask,
@@ -17,7 +18,7 @@ from werkzeug.utils import secure_filename
 # Deine ursprüngliche Konvertierungslogik
 from packliste_core import convert_file
 
-# Erlaubte Dateiendungen für Upload
+# Erlaubte Dateiendungen
 ALLOWED_EXTENSIONS = {"xlsx", "xls", "csv"}
 
 
@@ -30,30 +31,66 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-key")
 
 
-def run_conversion(input_path: Path, output_path: Path) -> Path:
+def run_conversion(
+    input_path: Path,
+    output_dir: Path,
+    desired_stem: Optional[str],
+) -> Path:
     """
-    Wrapper um deine ursprüngliche convert_file-Funktion aus packliste_core.
+    Führt die Konvertierung aus.
 
-    Entspricht funktional der EXE-Variante:
-    - input_path  -> hochgeladene Datei
-    - output_path -> Ziel-Datei
-    - user_dichtungen -> aktuell leeres Dict (kann später aus Datei/DB geladen werden)
+    Wichtig: Hier wird davon ausgegangen, dass convert_file so arbeitet wie in
+    deiner EXE:
+      convert_file(eingabedatei, AUSGABE_ORDNER, user_dichtungen)
+
+    Danach suchen wir im Ausgabeordner nach neu entstandenen .xlsx-Dateien.
     """
-    user_dichtungen = {}  # hier könntest du später deine gespeicherten Dichtungen laden
+    user_dichtungen = {}  # später kannst du hier echte Dichtungen laden
 
-    # packliste_core arbeitet mit String-Pfaden
-    convert_file(str(input_path), str(output_path), user_dichtungen)
+    # Vorher merken, welche .xlsx-Dateien im Ordner existieren
+    before = set(output_dir.rglob("*.xlsx"))
 
-    # convert_file schreibt die Datei nach output_path
-    return output_path
+    # Konvertierung ausführen – 2. Parameter = AUSGABE-ORDNER
+    convert_file(str(input_path), str(output_dir), user_dichtungen)
+
+    # Nachher schauen, was neu dazu gekommen ist
+    after = set(output_dir.rglob("*.xlsx"))
+    new_files = [p for p in after if p not in before]
+
+    if not new_files:
+        raise RuntimeError(
+            "Konvertierung hat keine neue Excel-Datei erzeugt "
+            f"(output_dir={output_dir})."
+        )
+
+    # Falls mehrere neu sind, nehmen wir die jüngste
+    result = max(new_files, key=lambda p: p.stat().st_mtime)
+
+    # Optional umbenennen auf gewünschten Namen
+    if desired_stem:
+        target = output_dir / f"{desired_stem}.xlsx"
+        try:
+            if target.exists():
+                target.unlink()
+            result.rename(target)
+            result = target
+        except Exception:
+            # Wenn das Umbenennen scheitert, loggen wir es, nutzen aber trotzdem result
+            app.logger.exception(
+                "Konnte Ausgabedatei nicht in '%s' umbenennen – verwende Originalnamen.",
+                target,
+            )
+
+    return result
 
 
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "GET":
+        # Startseite mit Formular
         return render_template("index.html")
 
-    # POST: Datei-Upload
+    # POST: Datei wurde hochgeladen
     if "input_file" not in request.files:
         flash("Bitte eine Packlisten-Datei hochladen (.xlsx/.xls/.csv).", "error")
         return redirect(url_for("index"))
@@ -68,35 +105,27 @@ def index():
         flash("Ungültiger Dateityp. Erlaubt sind .xlsx, .xls und .csv.", "error")
         return redirect(url_for("index"))
 
-    # Optionaler Ausgabename aus dem Formular
-    custom_name = request.form.get("custom_output_name", "").strip()
+    # Optionaler gewünschter Dateiname (ohne .xlsx)
+    custom_name_raw = request.form.get("custom_output_name", "").strip()
+    desired_stem: Optional[str] = (
+        secure_filename(custom_name_raw) if custom_name_raw else None
+    )
 
-    # Temporärer Arbeitsordner (wird nach der Anfrage automatisch gelöscht)
+    # Temporäres Arbeitsverzeichnis
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
 
-        # Eingabedatei sicher speichern
+        # Eingabedatei speichern
         safe_input_name = secure_filename(file.filename)
         input_path = tmpdir_path / safe_input_name
         file.save(input_path)
 
-        # Ausgabedatei-Namen bestimmen
-        if custom_name:
-            safe_output_stem = secure_filename(custom_name)
-        else:
-            safe_output_stem = Path(safe_input_name).stem + "_konvertiert"
-
-        output_name = safe_output_stem + ".xlsx"
-        output_path = tmpdir_path / output_name
-
-        # Konvertierung ausführen
         try:
-            converted_path = run_conversion(input_path, output_path)
+            # Konvertierung ausführen – output_dir = tmpdir_path
+            converted_path = run_conversion(input_path, tmpdir_path, desired_stem)
         except Exception:
-            # Fehler in den Logs sichtbar machen
+            # Fehler loggen und direkt als HTML ausgeben
             app.logger.exception("Fehler beim Konvertieren")
-
-            # Fehlermeldung direkt zurückgeben (kein error.html nötig)
             return (
                 "Unerwarteter Fehler im Server<br><br>"
                 "<pre>"
@@ -105,11 +134,21 @@ def index():
                 500,
             )
 
-        # Fertige Excel-Datei an den Browser schicken
+        # Sicherheitscheck: existiert die Datei wirklich?
+        if not converted_path.exists():
+            app.logger.error(
+                "Ausgabedatei existiert nicht: %s", converted_path
+            )
+            return (
+                "Fehler: Die konvertierte Datei konnte nicht gefunden werden.",
+                500,
+            )
+
+        # Fertige Excel an den Browser schicken
         return send_file(
             converted_path,
             as_attachment=True,
-            download_name=output_name,
+            download_name=converted_path.name,
         )
 
 
