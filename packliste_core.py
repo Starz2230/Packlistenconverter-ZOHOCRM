@@ -14,14 +14,15 @@ from copy import copy
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
 
-# Rich-Text (fetter Wochentag) – optional, falls vorhanden
+# Rich-Text (fetter Wochentag) – optional, falls von openpyxl unterstützt
 try:
     from openpyxl.cell.text import InlineFont
     from openpyxl.cell.rich_text import TextBlock, CellRichText
     RICH_TEXT_AVAILABLE = True
-except Exception:
+except Exception:  # pragma: no cover - Fallback
     InlineFont = TextBlock = CellRichText = None
     RICH_TEXT_AVAILABLE = False
+
 
 # ---------------------------------------------------------------------------
 # Konstanten
@@ -67,14 +68,11 @@ DEFAULT_DICHTUNGEN = []
 
 
 # ---------------------------------------------------------------------------
-# Dichtungen laden/speichern
+# Dichtungen laden/speichern (wird in der Web-Variante normalerweise
+# in app.py gemacht, diese Helfer bleiben für Kompatibilität erhalten)
 # ---------------------------------------------------------------------------
 
 def load_dichtungen():
-    """
-    Liest dichtungen.json aus demselben Ordner wie dieses Skript.
-    Struktur wie in der EXE: Liste von Dicts mit name/always_show/default_value/order.
-    """
     path = resource_path(DICHTUNGEN_CONFIG)
     if not os.path.exists(path):
         save_dichtungen(DEFAULT_DICHTUNGEN)
@@ -114,6 +112,7 @@ def save_dichtungen(dichtungen_list):
 def transform_zeitraum(val):
     """
     "21.03.2025 08:00 - 09:00" -> "FR 21.03.25 08:00 - 09:00"
+    (Wochentag + Datum zweistelliges Jahr)
     """
     if not val or not isinstance(val, str):
         return val
@@ -133,6 +132,9 @@ def transform_zeitraum(val):
 
 
 def safe_val(df, col, index):
+    """
+    Sicherer Zugriff auf df[col].iloc[index] -> immer String oder "".
+    """
     if col not in df.columns:
         return ""
     if index < 0 or index >= len(df):
@@ -144,6 +146,9 @@ def safe_val(df, col, index):
 
 
 def parse_number(s):
+    """
+    Versucht eine Zahl aus String zu parsen, Komma wird als Dezimaltrenner akzeptiert.
+    """
     try:
         return float(str(s).replace(",", "."))
     except Exception:
@@ -151,6 +156,10 @@ def parse_number(s):
 
 
 def parse_date_part(value):
+    """
+    Extrahiert aus einem String ein Datum (DD.MM.YYYY).
+    Gibt pd.Timestamp oder None zurück.
+    """
     if not value or not isinstance(value, str):
         return None
     match = re.match(r"^(\d{1,2}\.\d{1,2}\.\d{4})", value.strip())
@@ -165,6 +174,10 @@ def parse_date_part(value):
 
 
 def get_zeitraum_von_bis(df, col="Zeitraum"):
+    """
+    Bestimmt min/max-Datum aus Spalte 'Zeitraum' und gibt
+    'DD.MM.YYYY - DD.MM.YYYY' zurück.
+    """
     if col not in df.columns:
         return ""
     dtlist = []
@@ -180,6 +193,10 @@ def get_zeitraum_von_bis(df, col="Zeitraum"):
 
 
 def spalte_leer(df, colname):
+    """
+    Prüft, ob eine DataFrame-Spalte komplett leer ist
+    (nur NaN/Leerstrings oder Spalte existiert nicht).
+    """
     if colname not in df.columns:
         return True
     col_series = df[colname].dropna().astype(str).str.strip()
@@ -189,10 +206,14 @@ def spalte_leer(df, colname):
 
 
 # ---------------------------------------------------------------------------
-# Dichtungen sortieren (wie in der EXE)
+# Dichtungen sortieren
 # ---------------------------------------------------------------------------
 
 def parse_numeric_part(name: str) -> float:
+    """
+    Sucht in 'name' nach einer Zahl oder einem Bruch (z.B. 6/4).
+    Gibt eine float zurück (z.B. 6.004) oder 999999 wenn nichts gefunden.
+    """
     m = re.search(r'(\d+)(?:/(\d+))?', name)
     if m:
         first = int(m.group(1))
@@ -202,6 +223,10 @@ def parse_numeric_part(name: str) -> float:
 
 
 def parse_suffix_priority(name: str) -> int:
+    """
+    Unterscheidet bekannte Suffixe (_S, _W, _G, etc.) und gibt
+    eine Priorität zurück (0,1,2...). Nicht erkannte Suffixe => 99.
+    """
     sfx = ""
     parts = name.rsplit("_", 1)
     if len(parts) == 2 and parts[1].strip():
@@ -218,8 +243,10 @@ def parse_suffix_priority(name: str) -> int:
 
 def final_sort_dichtungen(dichtungen, df):
     """
-    Wie in deiner EXE: Standard-Dichtungen vorn, danach Gruppierung
-    nach Suffix und numerischem Teil.
+    Sortierlogik wie in deiner EXE:
+    1) Standard-Dichtungen (always_show=True) vorne
+       - mit 'order' zuerst, dann numerisch/Alphabet
+    2) Nicht-Standard nach Suffix + numerischem Teil + Name
     """
     def sort_key(d):
         is_std = d.get("always_show", False)
@@ -353,6 +380,10 @@ def set_bottom_solid(ws, row_index):
 
 
 def remove_trailing_blank_rows(ws, start_row):
+    """
+    Löscht von unten nach oben alle komplett leeren Zeilen,
+    beginnend ab 'start_row'.
+    """
     def row_is_blank(r):
         for col_idx in range(1, ws.max_column + 1):
             val = ws.cell(row=r, column=col_idx).value
@@ -369,30 +400,76 @@ def remove_trailing_blank_rows(ws, start_row):
         last_row = ws.max_row
 
 
+# ---------------------------------------------------------------------------
+# Dichtungsnamen sinnvoll umbrechen (max. 2 Zeilen)
+# ---------------------------------------------------------------------------
+
 def apply_dicht_name_break(dicht_name: str) -> str:
     """
-    Wie in deiner EXE: "_" => Zeilenumbruch, sonst halbieren wenn sinnvoll.
+    Sinnvoller Zeilenumbruch für Dichtungsnamen:
+    - Bei "_" immer an dieser Stelle umbrechen.
+    - Sonst, wenn Leerzeichen vorhanden, an Wortgrenze so, dass
+      die beiden Zeilen ungefähr gleich lang sind.
+    - Wenn nur ein langes Wort: in der Mitte trennen.
+    Es wird maximal *ein* "\n" eingefügt -> höchstens 2 Zeilen.
     """
-    name = str(dicht_name)
+    if dicht_name is None:
+        return ""
+
+    name = str(dicht_name).strip()
+    if not name:
+        return ""
+
+    # 1) Break am Unterstrich -> z.B. "10/5_S" => "10/5\nS"
     if "_" in name:
         idx = name.index("_")
         return name[:idx] + "\n" + name[idx + 1:]
-    else:
-        name = name.strip()
-        one_line_width = (len(name) + 1) * 1.1
-        two_line_width = (math.ceil(len(name) / 2) + 1) * 1.1
-        if two_line_width < one_line_width:
-            half = math.ceil(len(name) / 2)
-            return name[:half] + "\n" + name[half:]
-        else:
-            return name
+
+    # 2) Mehrere Wörter? Dann an Wortgrenze umbrechen.
+    words = name.split()
+    if len(words) == 1:
+        # Nur ein Wort -> ggf. in der Mitte teilen
+        w = words[0]
+        if len(w) <= 6:
+            return w  # kurz genug, kein Umbruch
+        half = math.ceil(len(w) / 2)
+        return w[:half] + "\n" + w[half:]
+
+    if len(words) == 2:
+        # Einfach "Wort1\nWort2", z.B. "Omega klebend"
+        return words[0] + "\n" + words[1]
+
+    # Mehr als 2 Wörter -> Split so wählen, dass beide Zeilen ähnlich lang sind
+    total_len = sum(len(w) for w in words)
+    target = total_len / 2.0
+    best_split = 1
+    best_diff = total_len
+
+    running = 0
+    for i in range(1, len(words)):
+        running += len(words[i - 1])
+        diff = abs(running - target)
+        if diff < best_diff:
+            best_diff = diff
+            best_split = i
+
+    line1 = " ".join(words[:best_split])
+    line2 = " ".join(words[best_split:])
+    return line1 + "\n" + line2
 
 
 # ---------------------------------------------------------------------------
 # Zentrale Konvertier-Funktion (Web / Headless)
 # ---------------------------------------------------------------------------
 
-def convert_file(input_path, output_path, user_dichtungen=None, show_message=False):
+def convert_file(input_path, output_path, user_dichtungen, show_message=False):
+    """
+    Web-/Headless-Version deiner Converter-Logik.
+    Schreibt die Excel-Packliste auf Basis von:
+    - Packliste_Template.xlsx
+    - Eingabe-CSV/Excel
+    - Dichtungen aus `user_dichtungen` (dichtungen.json)
+    """
     template_path = resource_path(TEMPLATE_FILE)
     if not os.path.isfile(template_path):
         raise FileNotFoundError(
@@ -418,7 +495,6 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
         data_rows = df.iloc[1:].copy()
 
         def parse_datetime(x):
-            # z.B. "24.11.2025 08:00 - 09:00"
             pattern = r'^(\d{1,2}\.\d{1,2}\.\d{4})\s+(\d{1,2}:\d{1,2})'
             m = re.match(pattern, str(x))
             if m:
@@ -428,7 +504,6 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
                     format="%d.%m.%Y %H:%M",
                     errors="coerce",
                 )
-            # nur Datum
             m2 = re.match(r'^(\d{1,2}\.\d{1,2}\.\d{4})', str(x))
             if m2:
                 return pd.to_datetime(
@@ -461,25 +536,8 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
     ws = wb.active
     ws.delete_rows(1)
 
-    # 6) Dichtungen bestimmen
-    dichtungen = user_dichtungen or []
-    # FALLBACK: wenn keine dichtungen.json oder leere Liste -> Spalten aus der Datei verwenden
-    if not dichtungen:
-        main_cols = {
-            "Service Techniker",
-            "Zeitraum",
-            "Dealname",
-            "Weitere Techniker",
-            "Informationen Packliste",
-            "Ersatzteil und Zubehör",
-        }
-        auto_cols = [c for c in df.columns if c not in main_cols]
-        dichtungen = [
-            {"name": c, "always_show": False, "default_value": 0, "order": ""}
-            for c in auto_cols
-        ]
-
-    final_dichtungen = final_sort_dichtungen(dichtungen, df)
+    # 6) Dichtungen sortieren
+    final_dichtungen = final_sort_dichtungen(user_dichtungen, df)
 
     # 7) Kopfbereich: Service-Techniker & Zeitraum
     serv_val = safe_val(df, "Service Techniker", 3)
@@ -494,6 +552,7 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
     )
 
     # Mapping Eingabe-Spalten -> Template
+    # (hier liegen später "Infos zu Kunde" (F) & "Ersatzteil" (G))
     global_mainfield = [
         ("Zeitraum", 2),                # B
         ("Dealname", 3),                # C
@@ -502,7 +561,7 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
         ("Ersatzteil und Zubehör", 7),  # G
     ]
 
-    # 8) Dichtungs-Spalten ab Spalte E
+    # 8) Dichtungs-Spalten: Start bei Platzhalter-Spalte E
     current_col = PLATZHALTER_COL_INDEX
     first_run = True
     dicht_col_map = {}
@@ -511,30 +570,34 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
         dicht_name = dicht.get("name")
         if not dicht_name:
             continue
+
+        # "Tag" soll keine Dichtungsspalte sein
+        if str(dicht_name).strip().lower() == "tag":
+            continue
+
         is_standard = dicht.get("always_show", False)
-        # Nicht-Standard-Dichtungen nur, wenn Spalte nicht komplett leer
         if (not is_standard) and spalte_leer(df, dicht_name):
             continue
 
         if first_run:
-            used_col = current_col     # Platzhalter-Spalte E wiederverwenden
+            used_col = current_col
             first_run = False
         else:
-            new_col = current_col + 1  # neue Spalte rechts einfügen
+            new_col = current_col + 1
             ws.insert_cols(new_col)
             copy_column_with_style(ws, PLATZHALTER_COL_INDEX, new_col)
-            # Mappings anpassen
+            # Mappings anpassen (Spalten hinter E nach rechts schieben)
             for i, (dfcol, cidx) in enumerate(global_mainfield):
                 if cidx >= new_col:
                     global_mainfield[i] = (dfcol, cidx + 1)
             used_col = new_col
             current_col = new_col
 
-        # linker Rand
+        # Linker Rand
         set_column_left_border(ws, used_col, start_row=1,
                                border_style="thin")
 
-        # Kopfzelle Dichtungsname
+        # Kopfzeile: Dichtungsname mit sinnvollem Umbruch
         mod_name = apply_dicht_name_break(dicht_name)
         head_cell = ws.cell(
             row=TEMPLATE_DICHTUNG_NAME_ROW,
@@ -548,7 +611,15 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
             wrap_text=True,
         )
 
-        # Summenwert in Zeile 1
+        # Spaltenbreite anhand der längsten Kopfzeilen-Zeile bestimmen
+        header_lines = str(mod_name).split("\n")
+        max_header_len = max(len(line) for line in header_lines if line)
+        # etwas Luft geben, aber nicht zu breit
+        col_width = max(5, min(max_header_len + 2, 12))
+        col_letter = get_column_letter(used_col)
+        ws.column_dimensions[col_letter].width = col_width
+
+        # Summenzeile oben
         sum_val_raw = safe_val(df, dicht_name, DF_SUM_ROW)
         sum_num = parse_number(sum_val_raw)
         sum_cell = ws.cell(
@@ -566,7 +637,7 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
 
         dicht_col_map[dicht_name] = used_col
 
-    # Linie unter den Dichtungsnamen
+    # Dünne Linie unter den Dichtungsbezeichnungen
     set_bottom_solid(ws, TEMPLATE_DICHTUNG_NAME_ROW)
 
     # 9) Datenzeilen füllen
@@ -577,11 +648,13 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
         copy_entire_row_format(ws, TEMPLATE_DATA_START_ROW, t_row)
 
         row_num = df_row
-        # Laufende Nummer in Spalte A
+        # Nummerierung in Spalte A
         num_cell = ws.cell(row=t_row, column=NUMBERING_COL, value=row_num)
         num_cell.font = Font(name="Calibri", size=12, bold=True)
         num_cell.alignment = Alignment(
-            horizontal="right", vertical="top", wrap_text=True
+            horizontal="right",
+            vertical="top",
+            wrap_text=True,
         )
 
         # Hauptfelder
@@ -590,9 +663,25 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
             cell = ws.cell(row=t_row, column=tmplt_col)
 
             if df_col == "Zeitraum":
-                # hier der fertige String (kein RichText nötig)
-                cell.value = val
-                cell.font = Font(name="Calibri", size=12, bold=True)
+                # Datums-/Zeitformat in deinen gewünschten Text umwandeln
+                val = transform_zeitraum(val)
+                if RICH_TEXT_AVAILABLE and val:
+                    parts = val.split(" ", 1)
+                    if len(parts) == 2:
+                        wtag, rest = parts
+                        rest = " " + rest
+                    else:
+                        wtag = val
+                        rest = ""
+                    bold_inline = InlineFont(rFont="Calibri", sz=12, b=True)
+                    normal_inline = InlineFont(rFont="Calibri", sz=12, b=False)
+                    rt = CellRichText()
+                    rt.append(TextBlock(bold_inline, wtag))
+                    rt.append(TextBlock(normal_inline, rest))
+                    cell.value = rt
+                else:
+                    cell.value = val
+                    cell.font = Font(name="Calibri", size=12, bold=True)
             else:
                 cell.value = val
                 if df_col in [
@@ -600,6 +689,7 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
                     "Ersatzteil und Zubehör",
                     "Weitere Techniker",
                 ]:
+                    # rot, fett (wie in der EXE)
                     cell.font = Font(bold=True, color="FF0000")
                 else:
                     cell.font = Font(
@@ -618,6 +708,8 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
             dicht_name = dicht.get("name")
             if not dicht_name:
                 continue
+            if str(dicht_name).strip().lower() == "tag":
+                continue
             is_standard = dicht.get("always_show", False)
             if (not is_standard) and spalte_leer(df, dicht_name):
                 continue
@@ -629,7 +721,7 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
                 if dicht_name in df.columns else ""
             cell = ws.cell(row=t_row, column=col_idx)
             try:
-                num_val = float(raw_val)
+                num_val = float(str(raw_val).replace(",", "."))
                 cell.value = round(num_val)
                 cell.number_format = "0"
             except Exception:
@@ -657,7 +749,7 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
 
         t_row += 1
 
-    # 10) "zusätzliche Dichtungen"-Zeile (ohne Extra-Logik)
+    # 10) "zusätzliche Dichtungen"-Zeile
     extra_line_row = t_row
     ws.insert_rows(idx=extra_line_row)
     copy_entire_row_format(ws, TEMPLATE_DATA_START_ROW, extra_line_row)
@@ -683,6 +775,40 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
             fgColor=bg_color,
         )
 
+    # Standard-Dichtungen vorbelegen (wie in der EXE)
+    for dicht in final_dichtungen:
+        if not dicht.get("always_show", False):
+            continue
+        fix_value = dicht.get("default_value", 0)
+        try:
+            fix_value_num = float(fix_value)
+        except Exception:
+            fix_value_num = 0.0
+        col_idx = dicht_col_map.get(dicht.get("name"))
+        if col_idx is None:
+            continue
+        c = ws.cell(row=extra_line_row, column=col_idx, value=fix_value_num)
+        c.number_format = "0"
+        c.alignment = Alignment(
+            horizontal="center", vertical="top", wrap_text=True
+        )
+        c.font = Font(name="Calibri", size=12, bold=False)
+
+        old_sum = ws.cell(row=TEMPLATE_SUM_ROW, column=col_idx).value
+        old_sum = old_sum if isinstance(old_sum, (int, float)) else 0
+        new_sum = old_sum + fix_value_num
+        s_cell = ws.cell(row=TEMPLATE_SUM_ROW,
+                         column=col_idx, value=new_sum)
+        s_cell.number_format = "0"
+        s_cell.font = Font(
+            name="Calibri", size=16, bold=False, color="FF0000"
+        )
+        s_cell.alignment = Alignment(
+            horizontal="center",
+            vertical="top",
+            wrap_text=True,
+        )
+
     # 11) Spaltenbreiten Infos/Ersatzteile zurücksetzen
     for field, orig_width in [
         ("Informationen Packliste", original_width_info),
@@ -697,11 +823,26 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
             ws.column_dimensions[col_letter].width = orig_width
 
     # 12) Spalten ausblenden wenn leer
+    # Weitere Techniker -> Spalte D (Fix-Buchstabe, da wir nur ab E einfügen)
     if spalte_leer(df, "Weitere Techniker"):
         ws.column_dimensions["D"].hidden = True
     else:
         ws.column_dimensions["D"].hidden = False
 
+    # Infos zu Kunde (Informationen Packliste)
+    info_col_idx = next(
+        (col for (df_field, col) in global_mainfield
+         if df_field == "Informationen Packliste"),
+        None,
+    )
+    if info_col_idx is not None:
+        info_letter = get_column_letter(info_col_idx)
+        if spalte_leer(df, "Informationen Packliste"):
+            ws.column_dimensions[info_letter].hidden = True
+        else:
+            ws.column_dimensions[info_letter].hidden = False
+
+    # Ersatzteilspalte
     ersatz_col_idx = next(
         (col for (df_field, col) in global_mainfield
          if df_field == "Ersatzteil und Zubehör"),
@@ -737,5 +878,3 @@ def convert_file(input_path, output_path, user_dichtungen=None, show_message=Fal
         os.remove(temp_copy_path)
 
     return output_path
-
-
