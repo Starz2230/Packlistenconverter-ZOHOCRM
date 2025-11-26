@@ -537,24 +537,30 @@ def convert_file(input_path, output_path, user_dichtungen, show_message=False):
         dicht_col_map[dicht_name] = used_col
 
     # Dünne Linie unter den Dichtungsbezeichnungen
-    set_bottom_solid(ws, TEMPLATE_DICHTUNG_NAME_ROW)
+    # in packliste_core.py – alte set_bottom_solid-Funktion vollständig ersetzen
+from openpyxl.styles import Border, Side  # falls oben schon importiert, doppelt egal
 
-    # 9) Datenzeilen füllen
-    t_row = TEMPLATE_DATA_START_ROW
 
-    for df_row in range(DF_DATA_START_ROW, len(df)):
-        if t_row > ws.max_row:
-            ws.insert_rows(idx=t_row)
-        copy_entire_row_format(ws, TEMPLATE_DATA_START_ROW, t_row)
+def set_bottom_solid(ws, row_index):
+    """
+    Zeichnet eine durchgehende untere Rahmenlinie in der angegebenen Zeile.
+    Wird u.a. für die Zeile TEMPLATE_DICHTUNG_NAME_ROW verwendet.
+    """
+    thin = Side(style="thin", color="000000")
 
-        row_num = df_row
-        num_cell = ws.cell(row=t_row, column=NUMBERING_COL, value=row_num)
-        num_cell.font = Font(name="Calibri", size=12, bold=True)
-        num_cell.alignment = Alignment(
-            horizontal="right",
-            vertical="top",
-            wrap_text=True,
+    max_col = ws.max_column or 1
+
+    for col_idx in range(1, max_col + 1):
+        c = ws.cell(row=row_index, column=col_idx)
+
+        old = c.border or Border()
+        c.border = Border(
+            left=old.left,
+            right=old.right,
+            top=old.top,
+            bottom=thin,
         )
+
 
         # Hauptfelder
         for (df_col, tmplt_col) in global_mainfield:
@@ -758,3 +764,4 @@ def convert_file(input_path, output_path, user_dichtungen, show_message=False):
         os.remove(temp_copy_path)
 
     return output_path
+
