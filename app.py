@@ -2,17 +2,16 @@
 # -*- coding: utf-8 -*-
 
 import os
-from pathlib import Path
 import tempfile
+from datetime import date
+from pathlib import Path
 
+import pandas as pd
 from flask import (
     Flask,
     render_template,
     request,
     send_file,
-    redirect,
-    url_for,
-    flash,
     jsonify,
 )
 from werkzeug.utils import secure_filename
@@ -20,8 +19,9 @@ from werkzeug.utils import secure_filename
 from packliste_core import convert_file, load_dichtungen, save_dichtungen
 
 # -------------------------------------------------------
-# Grund-Setup
+# Flask-App
 # -------------------------------------------------------
+app = Flask(__name__)
 
 ALLOWED_EXTENSIONS = {"xlsx", "xls", "csv"}
 
@@ -30,175 +30,160 @@ def allowed(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "dev-key")
-
-BASE_DIR = Path(__file__).resolve().parent
-
-
 # -------------------------------------------------------
-# Hilfsfunktion: Konvertierung anstoßen
+# Auto-Dateinamen wie im EXE-Tool
+# Service Techniker + Zeitraum -> Dateiname
 # -------------------------------------------------------
-
-def run_conversion(upload_path: Path, out_dir: Path, desired_stem: str) -> Path:
+def suggest_auto_stem(input_path: str) -> str | None:
     """
-    Ruft packliste_core.convert_file(...) auf und gibt den Pfad zur fertigen
-    Excel-Datei zurück.
+    Liest die Eingabedatei und erzeugt einen Dateinamen-Stamm wie
+    'DanielOberrauner_24-11-2025-28-11-2025'.
+    Gibt None zurück, wenn etwas schiefgeht.
     """
-    user_dichtungen = load_dichtungen()
+    try:
+        ext = os.path.splitext(input_path)[1].lower()
+        if ext == ".csv":
+            df = pd.read_csv(input_path, sep=";", engine="python", header=0)
+        else:
+            df = pd.read_excel(input_path, header=0)
+    except Exception:
+        return None
 
-    stem = (desired_stem or "").strip() or "Packliste"
-    output_path = out_dir / f"{stem}.xlsx"
+    def safe_val(df_, col, index):
+        if col not in df_.columns or index < 0 or index >= len(df_):
+            return ""
+        val = df_[col].iloc[index]
+        if pd.isna(val):
+            return ""
+        return str(val)
 
-    # packliste_core kümmert sich um alles; show_message=False,
-    # weil wir im Web keine Messagebox wollen.
-    convert_file(
-        str(upload_path),
-        str(output_path),
-        user_dichtungen,
-        show_message=False,
-    )
+    def parse_date_part(value):
+        import re as _re
 
-    if not output_path.exists():
-        raise RuntimeError(
-            f"Konvertierung hat keine neue Excel-Datei erzeugt "
-            f"(output_path={output_path})"
-        )
+        if not isinstance(value, str):
+            value = str(value)
+        m = _re.match(r"^(\d{1,2}\.\d{1,2}\.\d{4})", value.strip())
+        if not m:
+            return None
+        ds = m.group(1)
+        try:
+            return pd.to_datetime(ds, dayfirst=True, errors="coerce")
+        except Exception:
+            return None
 
-    return output_path
+    def get_zeitraum_von_bis(df_, col="Zeitraum"):
+        if col not in df_.columns:
+            return ""
+        dtlist = []
+        for val in df_[col].dropna():
+            dt = parse_date_part(val)
+            if dt is not None:
+                dtlist.append(dt)
+        if not dtlist:
+            return ""
+        von_dt = min(dtlist)
+        bis_dt = max(dtlist)
+        # mit Bindestrich statt " - ", damit es im Dateinamen sauber ist
+        return f"{von_dt.strftime('%d.%m.%Y')}-{bis_dt.strftime('%d.%m.%Y')}"
+
+    serv = safe_val(df, "Service Techniker", 3)
+    date_range = get_zeitraum_von_bis(df, "Zeitraum")
+
+    if not serv and not date_range:
+        return None
+
+    def sanitize(text: str) -> str:
+        # nur Buchstaben, Zahlen, Unterstrich und Minus
+        return "".join(c for c in text if c.isalnum() or c in ("_", "-"))
+
+    serv_sanitized = sanitize(serv) or "Packliste"
+    date_sanitized = sanitize(date_range.replace(" ", "")) if date_range else ""
+
+    if date_sanitized:
+        stem = f"{serv_sanitized}_{date_sanitized}"
+    else:
+        stem = serv_sanitized
+
+    return stem or None
 
 
 # -------------------------------------------------------
-# Startseite + Upload / Download
+# Startseite: Upload + Konvertierung
 # -------------------------------------------------------
-
 @app.route("/", methods=["GET", "POST"])
 def index():
-    if request.method == "GET":
-        # Nur Formular anzeigen
-        return render_template("index.html")
+    if request.method == "POST":
+        error = None
 
-    # --- POST: Datei wurde hochgeladen ---
-    if "input_file" not in request.files or request.files["input_file"].filename == "":
-        flash("Bitte eine Packlisten-Datei hochladen (.xlsx/.xls/.csv).", "error")
-        return redirect(url_for("index"))
+        upload = request.files.get("input_file")
+        desired_stem = request.form.get("desired_name", "").strip()
 
-    file = request.files["input_file"]
+        if not upload or upload.filename == "":
+            error = "Bitte eine Packlisten-Datei auswählen (.xlsx / .xls / .csv)."
+            return render_template("index.html", error=error)
 
-    if not allowed(file.filename):
-        flash("Ungültiger Dateityp. Erlaubt sind .xlsx, .xls, .csv.", "error")
-        return redirect(url_for("index"))
+        if not allowed(upload.filename):
+            error = "Ungültiges Dateiformat. Erlaubt sind: .xlsx, .xls, .csv"
+            return render_template("index.html", error=error)
 
-    desired_name = (request.form.get("desired_name") or "").strip()
-    if not desired_name:
-        desired_name = "Packliste"
+        # Temporäres Arbeitsverzeichnis
+        tmpdir = Path(tempfile.mkdtemp(prefix="packliste_"))
+        input_path = tmpdir / secure_filename(upload.filename)
+        upload.save(input_path)
 
-    # Temporäres Verzeichnis für Upload & Konvertierung
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir_path = Path(tmpdir)
-
-        # Upload speichern
-        input_path = tmpdir_path / secure_filename(file.filename)
-        file.save(input_path)
-
-        # Konvertieren
-        try:
-            converted_path = run_conversion(input_path, tmpdir_path, desired_name)
-        except Exception as e:
-            app.logger.exception("Fehler bei der Konvertierung")
-            return render_template(
-                "error.html",
-                message="Fehler beim Konvertieren",
-                details=str(e),
-            ), 500
-
-        # Erfolgreich → Datei zurückgeben
-        return send_file(
-            converted_path,
-            as_attachment=True,
-            download_name=f"{desired_name}.xlsx",
-        )
-
-
-# -------------------------------------------------------
-# Dichtungsverwaltung – Seite
-# -------------------------------------------------------
-
-@app.route("/dichtungen", methods=["GET"])
-def dichtungen_page():
-    """
-    Zeigt die hübsche Dichtungsverwaltungs-Seite.
-    Die Daten selbst holt sich das Frontend per /api/dichtungen.
-    """
-    return render_template("dichtungen.html")
-
-
-# -------------------------------------------------------
-# Dichtungsverwaltung – JSON-API (für das Frontend)
-# -------------------------------------------------------
-
-@app.route("/api/dichtungen", methods=["GET", "POST"])
-def dichtungen_api():
-    # ---- GET: aktuelle Konfiguration laden ----
-    if request.method == "GET":
-        items = load_dichtungen()
-        return jsonify({"success": True, "items": items})
-
-    # ---- POST: neue Konfiguration speichern ----
-    data = request.get_json(silent=True, force=True) or {}
-    raw_items = data.get("items")
-
-    if not isinstance(raw_items, list):
-        return jsonify({"success": False, "error": "invalid_payload"}), 400
-
-    cleaned = []
-    for item in raw_items:
-        if not isinstance(item, dict):
-            continue
-
-        name = str(item.get("name", "")).strip()
-        if not name:
-            continue
-
-        # Standard-Haken
-        always_show = bool(item.get("always_show"))
-
-        # Standardwert (Zahl)
-        default_value = item.get("default_value", 0)
-        try:
-            default_value = float(default_value)
-        except Exception:
-            default_value = 0.0
-
-        # Reihenfolge (optional ganzzahlig)
-        order_raw = str(item.get("order", "")).strip()
-        if order_raw:
-            try:
-                order = int(order_raw)
-            except Exception:
-                order = ""
+        # Dateinamen-Stamm:
+        # 1. Wenn der User etwas eingibt -> das verwenden
+        # 2. Sonst automatisch aus Service Techniker + Zeitraum
+        # 3. Fallback: Packliste_YYYYMMDD
+        if desired_stem:
+            stem = desired_stem
         else:
-            order = ""
+            stem = suggest_auto_stem(str(input_path))
+            if not stem:
+                stem = f"Packliste_{date.today():%Y%m%d}"
 
-        cleaned.append(
-            {
-                "name": name,
-                "always_show": always_show,
-                "default_value": default_value,
-                "order": order,
-            }
+        output_path = tmpdir / f"{stem}.xlsx"
+
+        try:
+            user_dichtungen = load_dichtungen()
+            # packliste_core kümmert sich um alles – wir wollen keine Messageboxen
+            convert_file(str(input_path), str(output_path), user_dichtungen, show_message=False)
+
+            if not output_path.exists():
+                raise RuntimeError("Konvertierung hat keine neue Excel-Datei erzeugt.")
+        except Exception as e:
+            print("Fehler bei der Konvertierung:", e)
+            error = f"Unerwarteter Fehler bei der Konvertierung: {e}"
+            return render_template("index.html", error=error)
+
+        # Erfolgreich -> Datei direkt zum Download schicken
+        return send_file(
+            output_path,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            as_attachment=True,
+            download_name=f"{stem}.xlsx",
         )
 
-    # In die dichtungen.json schreiben (packliste_core kümmert sich um den Pfad)
-    save_dichtungen(cleaned)
-
-    # Direkt das zurückgeben, was wirklich gespeichert ist
-    return jsonify({"success": True, "items": load_dichtungen()})
+    # GET-Aufruf
+    default_stem = f"Packliste_{date.today():%Y%m%d}"
+    return render_template("index.html", error=None, default_stem=default_stem)
 
 
 # -------------------------------------------------------
-# Debug-Start (lokal)
+# Dichtungen-Verwaltung (wird vom /dichtungen-Frontend genutzt)
 # -------------------------------------------------------
+@app.route("/dichtungen", methods=["GET", "POST"])
+def manage_dichtungen():
+    if request.method == "POST":
+        data = request.get_json() or {}
+        dichtungen = data.get("dichtungen", [])
+        save_dichtungen(dichtungen)
+        return jsonify({"ok": True})
+    else:
+        user_dichtungen = load_dichtungen()
+        return render_template("dichtungen.html", dichtungen=user_dichtungen)
+
 
 if __name__ == "__main__":
+    # Für Render ist das egal, lokal aber praktisch.
     app.run(debug=True, host="0.0.0.0", port=8000)
