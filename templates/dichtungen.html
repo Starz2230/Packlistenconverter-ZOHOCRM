@@ -1,111 +1,231 @@
 <!doctype html>
 <html lang="de">
 <head>
-    <meta charset="utf-8">
-    <title>Dichtungen verwalten</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-</head>
-<body class="page">
+  <meta charset="utf-8">
+  <title>Dichtungen verwalten – Packlistenconverter</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
 
-<header class="header">
-    <div class="header-left">
-        <h1>Dichtungen verwalten</h1>
-        <p>Spalten-Konfiguration für den Packlisten-Converter</p>
-    </div>
-    <div class="header-right">
-        <a class="btn btn-secondary" href="{{ url_for('index') }}">
-            &larr; Zurück zum Converter
-        </a>
-    </div>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #111;
+      color: #eee;
+    }
+    header {
+      padding: 16px 24px;
+      background: #000;
+      border-bottom: 1px solid #333;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 20px;
+    }
+    header a {
+      color: #9ad4ff;
+      text-decoration: none;
+      margin-left: 16px;
+    }
+    main {
+      max-width: 960px;
+      margin: 32px auto;
+      padding: 24px;
+      background: #1c1c1c;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.7);
+    }
+    h2 {
+      margin-top: 0;
+      margin-bottom: 8px;
+    }
+    p.subtitle {
+      margin-top: 0;
+      color: #aaa;
+      font-size: 14px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 16px;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid #333;
+      padding: 6px 8px;
+    }
+    th {
+      background: #222;
+      text-align: left;
+    }
+    tr:nth-child(even) td {
+      background: #181818;
+    }
+    input[type="text"],
+    input[type="number"] {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 4px 6px;
+      border-radius: 4px;
+      border: 1px solid #444;
+      background: #111;
+      color: #eee;
+      font-size: 13px;
+    }
+    input[type="checkbox"] {
+      transform: scale(1.1);
+    }
+    .actions {
+      margin-top: 16px;
+      display: flex;
+      gap: 12px;
+    }
+    .btn {
+      border: none;
+      border-radius: 4px;
+      padding: 8px 14px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .btn-primary {
+      background: #2ecc71;
+      color: #000;
+    }
+    .btn-secondary {
+      background: #444;
+      color: #eee;
+    }
+    .btn-small {
+      padding: 4px 10px;
+      font-size: 13px;
+    }
+    .flash {
+      margin-top: 8px;
+      padding: 8px 10px;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    .flash-success {
+      background: #1f4f2d;
+      color: #d6ffe4;
+      border: 1px solid #2ecc71;
+    }
+    .flash-error {
+      background: #4f1f1f;
+      color: #ffe0e0;
+      border: 1px solid #e74c3c;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Packlistenconverter → Zoho CRM</h1>
+  <div>
+    <a href="{{ url_for('index') }}">← Zurück zur Konvertierung</a>
+  </div>
 </header>
 
-<main class="main">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <div class="flash-container">
-          {% for category, message in messages %}
-            <div class="flash flash-{{ category }}">{{ message }}</div>
-          {% endfor %}
+<main>
+  <h2>Dichtungen verwalten</h2>
+  <p class="subtitle">
+    Hier kannst du Dichtungen hinzufügen, bearbeiten, Standard-Dichtungen festlegen
+    und die Reihenfolge bestimmen. Alles wird in <code>dichtungen.json</code> gespeichert.
+  </p>
+
+  {# Flash-Meldungen anzeigen #}
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, msg in messages %}
+        <div class="flash flash-{{ 'success' if category == 'success' else 'error' }}">
+          {{ msg }}
         </div>
-      {% endif %}
-    {% endwith %}
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
 
-    <section class="card">
-        <form method="post" class="form">
-            <input type="hidden" name="max_index" value="{{ total_rows - 1 }}">
+  <form method="post">
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 45%;">Name (Spaltenname)</th>
+          <th style="width: 10%;">Standard?</th>
+          <th style="width: 20%;">Standardwert</th>
+          <th style="width: 15%;">Reihenfolge</th>
+          <th style="width: 10%;">Löschen</th>
+        </tr>
+      </thead>
+      <tbody id="dichtungen-rows">
+        {% for d in dichtungen %}
+          <tr>
+            <td>
+              <input type="hidden" name="row_ids" value="{{ d.row_id }}">
+              <input type="text" name="name_{{ d.row_id }}" value="{{ d.name }}">
+            </td>
+            <td style="text-align:center;">
+              <input type="checkbox" name="always_show_{{ d.row_id }}"
+                     {% if d.always_show %}checked{% endif %}>
+            </td>
+            <td>
+              <input type="number" step="1" name="default_value_{{ d.row_id }}"
+                     value="{{ d.default_value }}">
+            </td>
+            <td>
+              <input type="number" step="1" name="order_{{ d.row_id }}"
+                     value="{{ d.order }}">
+            </td>
+            <td style="text-align:center;">
+              <input type="checkbox" name="delete_{{ d.row_id }}">
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
 
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>Name der Dichtung (Spaltenname)</th>
-                        <th>Standard?</th>
-                        <th>Standard-Menge</th>
-                        <th>Reihenfolge (1, 2, 3 ...)</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for i in range(total_rows) %}
-                        {% set d = dichtungen[i] if i < dichtungen|length else None %}
-                        <tr>
-                            <td>{{ i + 1 }}</td>
-                            <td>
-                                <input
-                                  type="text"
-                                  name="name_{{ i }}"
-                                  value="{{ d.name if d else '' }}"
-                                  placeholder="z.B. 6/4_S"
-                                >
-                            </td>
-                            <td class="center">
-                                <input
-                                  type="checkbox"
-                                  name="always_{{ i }}"
-                                  {% if d and d.always_show %}checked{% endif %}
-                                >
-                            </td>
-                            <td>
-                                <input
-                                  type="text"
-                                  name="value_{{ i }}"
-                                  value="{{ ('%.0f' % d.default_value) if d else '' }}"
-                                  placeholder="0"
-                                >
-                            </td>
-                            <td>
-                                <input
-                                  type="text"
-                                  name="order_{{ i }}"
-                                  value="{{ d.order if d else '' }}"
-                                  placeholder=""
-                                >
-                            </td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-
-            <div class="form-actions">
-                <button type="submit" class="btn btn-primary">
-                    Speichern
-                </button>
-                <a href="{{ url_for('index') }}" class="btn btn-secondary">
-                    Abbrechen
-                </a>
-            </div>
-
-            <p class="hint">
-                <strong>Standard?</strong> = Spalte wird immer angezeigt, auch wenn sie in der Eingabedatei leer ist.
-                Der Standard-Mengenwert wird zusätzlich in der Zeile „zusätzliche Dichtungen“ vorbelegt
-                und in die Summe eingerechnet – wie in der EXE.
-            </p>
-        </form>
-    </section>
+    <div class="actions">
+      <button type="button" class="btn btn-secondary btn-small"
+              onclick="addRow()">
+        + Neue Dichtung
+      </button>
+      <button type="submit" class="btn btn-primary">
+        Speichern
+      </button>
+    </div>
+  </form>
 </main>
 
-<footer class="footer">
-    <span>Packlisten Converter – Dichtungen</span>
-</footer>
+<script>
+  let nextIndex = {{ dichtungen|length }};
+
+  function addRow() {
+    const tbody = document.getElementById("dichtungen-rows");
+    const tr = document.createElement("tr");
+    const idx = nextIndex++;
+
+    tr.innerHTML = `
+      <td>
+        <input type="hidden" name="row_ids" value="${idx}">
+        <input type="text" name="name_${idx}">
+      </td>
+      <td style="text-align:center;">
+        <input type="checkbox" name="always_show_${idx}">
+      </td>
+      <td>
+        <input type="number" step="1" name="default_value_${idx}" value="0">
+      </td>
+      <td>
+        <input type="number" step="1" name="order_${idx}">
+      </td>
+      <td style="text-align:center;">
+        <input type="checkbox" name="delete_${idx}">
+      </td>
+    `;
+    tbody.appendChild(tr);
+  }
+</script>
 
 </body>
 </html>
