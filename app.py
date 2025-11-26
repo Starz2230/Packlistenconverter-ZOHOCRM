@@ -14,7 +14,7 @@ from flask import (
 )
 from werkzeug.utils import secure_filename
 
-# Hier verwenden wir deine ursprüngliche Konvertierungslogik
+# Deine ursprüngliche Konvertierungslogik
 from packliste_core import convert_file
 
 # Erlaubte Dateiendungen für Upload
@@ -92,14 +92,16 @@ def index():
         # Konvertierung ausführen
         try:
             converted_path = run_conversion(input_path, output_path)
-        except Exception as exc:
+        except Exception:
+            # Fehler in den Logs sichtbar machen
             app.logger.exception("Fehler beim Konvertieren")
+
+            # Fehlermeldung direkt zurückgeben (kein error.html nötig)
             return (
-                render_template(
-                    "error.html",
-                    error=str(exc),
-                    traceback=traceback.format_exc(),
-                ),
+                "Unerwarteter Fehler im Server<br><br>"
+                "<pre>"
+                + traceback.format_exc()
+                + "</pre>",
                 500,
             )
 
