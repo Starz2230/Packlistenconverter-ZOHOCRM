@@ -1,0 +1,230 @@
+[
+  {
+    "name": "10/4_B",
+    "always_show": true,
+    "default_value": 300.0,
+    "order": 5
+  },
+  {
+    "name": "10/4_S",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "10/4_W",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "10/5_W",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "12/5_B",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "14/7_B",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "4/4_B",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "4/4_S",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "4/4_W",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "6/4_B",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "6/4_S",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "6/4_W",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "8/4_B",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "8/4_S",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "8/4_W",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "8/5_B",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "Eisenz._S",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "GD_G",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "GD_S",
+    "always_show": true,
+    "default_value": 300.0,
+    "order": 4
+  },
+  {
+    "name": "GD_W",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "Haus_S",
+    "always_show": true,
+    "default_value": 150.0,
+    "order": 3
+  },
+  {
+    "name": "Lebenshilfe Pfeil_S",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "Neu Dichtung 1",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "Neue Dichtung 2",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "Neue Dichtung 3",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "Omega fl_B",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "Omega fl._W",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "Omega klebend",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "Omega no._B",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "Omega no._S",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "Pfeil_G",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "Pfeil klein hart",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "Pfeil klein weich",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "Pfeil_S",
+    "always_show": true,
+    "default_value": 150.0,
+    "order": 2
+  },
+  {
+    "name": "Rewe_B",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "Rewe_S",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "Türbox",
+    "always_show": false,
+    "default_value": 0.0,
+    "order": ""
+  },
+  {
+    "name": "10/5_S",
+    "always_show": true,
+    "default_value": 300.0,
+    "order": 1
+  }
+]
