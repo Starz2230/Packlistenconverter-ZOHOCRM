@@ -6,203 +6,328 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
 
   <style>
-    body {
-      margin: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #111;
-      color: #eee;
-    }
-    header {
-      padding: 16px 24px;
-      background: #000;
-      border-bottom: 1px solid #333;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    header h1 {
-      margin: 0;
-      font-size: 20px;
-    }
-    .header-actions {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-    }
-    .btn {
-      border: none;
-      border-radius: 4px;
-      padding: 8px 14px;
-      cursor: pointer;
-      font-size: 14px;
-      text-decoration: none;
-      display: inline-block;
-    }
-    .btn-primary {
-      background: #2ecc71;
-      color: #000;
-    }
-    .btn-secondary {
-      background: #444;
-      color: #eee;
-    }
-    .btn-small {
-      padding: 6px 10px;
-      font-size: 13px;
+    :root{
+      --bg-light: #f4ffe9;
+      --bg-page: #f9fff4;
+      --card-bg: #ffffff;
+      --accent: #6bdc5c;
+      --accent-dark: #41b936;
+      --accent-soft: #d9f7d4;
+      --text-main: #1a1a1a;
+      --text-muted: #6b7280;
+      --danger-bg: #fee2e2;
+      --danger-border: #fecaca;
+      --danger-text: #b91c1c;
     }
 
-    main {
-      max-width: 960px;
-      margin: 32px auto;
-      padding: 0 16px 32px;
-    }
-    .card {
-      background: #1c1c1c;
-      border-radius: 12px;
-      padding: 24px;
-      box-shadow: 0 10px 30px rgba(0,0,0,.7);
-    }
-    .card h2 {
-      margin-top: 0;
-      margin-bottom: 4px;
-    }
-    .card p.subtitle {
-      margin-top: 0;
-      color: #aaa;
-      font-size: 14px;
-    }
-    .form-row {
-      margin-top: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    label {
-      font-size: 14px;
-      color: #ccc;
-    }
-    input[type="file"],
-    input[type="text"] {
-      width: 100%;
-      box-sizing: border-box;
-      padding: 8px 10px;
-      border-radius: 6px;
-      border: 1px solid #444;
-      background: #111;
-      color: #eee;
-      font-size: 14px;
-    }
-    .submit-row {
-      margin-top: 20px;
-    }
-    .submit-row button {
-      width: 100%;
-      padding: 12px;
-      font-size: 15px;
-      border-radius: 8px;
-    }
-    .error-box {
-      margin-top: 12px;
-      padding: 10px 12px;
-      border-radius: 6px;
-      background: #4f1f1f;
-      border: 1px solid #e74c3c;
-      color: #ffe0e0;
-      font-size: 13px;
-    }
-    .hint {
-      margin-top: 24px;
-      font-size: 13px;
-      color: #aaa;
-    }
-    .hint ul {
-      margin-top: 8px;
-      padding-left: 18px;
-    }
-    footer {
-      font-size: 11px;
-      color: #666;
-      padding: 12px 24px 24px;
+    *{box-sizing:border-box;}
+
+    body{
+      margin:0;
+      min-height:100vh;
+      font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      background:radial-gradient(circle at top, var(--bg-light) 0, #ffffff 60%);
+      color:var(--text-main);
     }
 
-    @media (min-width: 700px) {
-      .form-row.horizontal {
-        flex-direction: row;
-        align-items: center;
+    .page{
+      max-width:1200px;
+      margin:0 auto;
+      padding:32px 16px 40px;
+    }
+
+    header.hero{
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:24px;
+      margin-bottom:32px;
+    }
+
+    .hero-left h1{
+      margin:10px 0 8px;
+      font-size:32px;
+      font-weight:700;
+    }
+
+    .hero-pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:4px 12px;
+      border-radius:999px;
+      background:var(--accent-soft);
+      color:#166534;
+      font-size:13px;
+      font-weight:500;
+    }
+    .hero-pill-dot{
+      width:10px;height:10px;
+      border-radius:999px;
+      background:#22c55e;
+      box-shadow:0 0 0 3px rgba(34,197,94,0.25);
+    }
+
+    .hero-sub{
+      margin:0;
+      font-size:15px;
+      color:var(--text-muted);
+    }
+
+    .hero-right{
+      display:flex;
+      align-items:flex-start;
+    }
+
+    .btn{
+      border:none;
+      border-radius:999px;
+      padding:10px 18px;
+      font-size:14px;
+      cursor:pointer;
+      text-decoration:none;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      white-space:nowrap;
+    }
+    .btn-primary{
+      background:linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
+      color:#fff;
+      box-shadow:0 10px 25px rgba(22,163,74,0.35);
+    }
+    .btn-primary:hover{
+      filter:brightness(1.05);
+    }
+    .btn-secondary{
+      background:#ffffff;
+      color:#111827;
+      border:1px solid #d1d5db;
+      box-shadow:0 8px 20px rgba(15,23,42,0.08);
+    }
+    .btn-secondary:hover{
+      background:#f9fafb;
+    }
+
+    main.content{
+      display:flex;
+      flex-direction:column;
+      gap:24px;
+    }
+
+    .card{
+      background:var(--card-bg);
+      border-radius:24px;
+      padding:24px 24px 22px;
+      box-shadow:0 25px 60px rgba(15,23,42,0.10);
+    }
+
+    .card h2{
+      margin:0 0 4px;
+      font-size:20px;
+    }
+    .card-sub{
+      margin:0 0 18px;
+      font-size:14px;
+      color:var(--text-muted);
+    }
+
+    form.converter-form{
+      display:flex;
+      flex-direction:column;
+      gap:16px;
+    }
+
+    .field-group{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+    .field-label{
+      font-size:13px;
+      font-weight:500;
+      color:#4b5563;
+    }
+
+    .field-input{
+      width:100%;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid #d1d5db;
+      background:#f9fafb;
+      font-size:14px;
+    }
+
+    .field-input:focus{
+      outline:none;
+      border-color:var(--accent-dark);
+      box-shadow:0 0 0 1px var(--accent-dark), 0 0 0 4px rgba(34,197,94,0.18);
+      background:#ffffff;
+    }
+
+    input[type="file"].field-input{
+      padding:8px 10px;
+      background:#ffffff;
+    }
+
+    .form-row-inline{
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+
+    .convert-button-row{
+      margin-top:8px;
+      display:flex;
+      justify-content:center;
+    }
+
+    .btn-convert{
+      width:100%;
+      max-width:460px;
+      padding:12px 24px;
+      font-size:15px;
+      font-weight:600;
+    }
+
+    .alert{
+      margin-top:16px;
+      border-radius:16px;
+      padding:10px 14px;
+      font-size:13px;
+      display:flex;
+      align-items:flex-start;
+      gap:8px;
+    }
+    .alert-icon{
+      margin-top:2px;
+      font-size:16px;
+    }
+    .alert-error{
+      background:var(--danger-bg);
+      border:1px solid var(--danger-border);
+      color:var(--danger-text);
+    }
+
+    .card-hints h3{
+      margin:0 0 6px;
+      font-size:15px;
+    }
+    .card-hints ul{
+      margin:0;
+      padding-left:18px;
+      font-size:13px;
+      color:var(--text-muted);
+    }
+    .card-hints li{
+      margin-bottom:4px;
+    }
+
+    footer{
+      margin-top:24px;
+      font-size:12px;
+      color:#9ca3af;
+    }
+
+    @media (min-width:720px){
+      form.converter-form .form-row-inline{
+        flex-direction:row;
       }
-      .form-row.horizontal label {
-        width: 230px;
-      }
-      .form-row.horizontal input[type="text"] {
-        max-width: 320px;
+      form.converter-form .form-row-inline .field-group{
+        flex:1;
       }
     }
   </style>
 </head>
 <body>
+  <div class="page">
+    <header class="hero">
+      <div class="hero-left">
+        <div class="hero-pill">
+          <span class="hero-pill-dot"></span>
+          <span>Zoho CRM · Packlistenconverter</span>
+        </div>
+        <h1>Packlistenconverter → Zoho CRM</h1>
+        <p class="hero-sub">
+          Excel-Packliste hochladen, serverseitig konvertieren und als fertige Zoho-Packliste herunterladen.
+        </p>
+      </div>
+      <div class="hero-right">
+        <a href="{{ url_for('manage_dichtungen') }}" class="btn btn-secondary">
+          Dichtungen einstellen
+        </a>
+      </div>
+    </header>
 
-<header>
-  <h1>Packlistenconverter → Zoho CRM</h1>
-  <div class="header-actions">
-    <!-- Button, der die Dichtungs-Verwaltung öffnet -->
-    <a href="{{ url_for('manage_dichtungen') }}"
-       class="btn btn-secondary btn-small">
-      Dichtungen einstellen
-    </a>
+    <main class="content">
+      <!-- Hauptkarte: Konverter -->
+      <section class="card">
+        <h2>Packliste konvertieren</h2>
+        <p class="card-sub">
+          Wähle eine Export-Datei der Monteure aus Zoho und starte die Konvertierung.
+        </p>
+
+        <form class="converter-form" method="post" enctype="multipart/form-data">
+          <div class="form-row-inline">
+            <div class="field-group">
+              <label class="field-label" for="input_file">
+                Packlisten-Datei auswählen <span style="color:#9ca3af;">(*.xlsx / *.xls / *.csv)</span>
+              </label>
+              <input
+                class="field-input"
+                type="file"
+                id="input_file"
+                name="input_file"
+                required
+              >
+            </div>
+
+            <div class="field-group">
+              <label class="field-label" for="desired_name">
+                Gewünschter Dateiname <span style="color:#9ca3af;">(optional, ohne .xlsx)</span>
+              </label>
+              <input
+                class="field-input"
+                type="text"
+                id="desired_name"
+                name="desired_name"
+                placeholder="z.B. Packliste_KW48 oder leer lassen für automatischen Namen"
+                value="{{ default_stem|default('', true) }}"
+              >
+            </div>
+          </div>
+
+          <div class="convert-button-row">
+            <button type="submit" class="btn btn-primary btn-convert">
+              Konvertieren &amp; herunterladen
+            </button>
+          </div>
+        </form>
+
+        {% if error %}
+          <div class="alert alert-error">
+            <span class="alert-icon">⚠️</span>
+            <span>{{ error }}</span>
+          </div>
+        {% endif %}
+      </section>
+
+      <!-- Hinweise -->
+      <section class="card card-hints">
+        <h3>Hinweise</h3>
+        <ul>
+          <li>Die Datei wird nur temporär auf dem Server gespeichert und nach der Konvertierung gelöscht.</li>
+          <li>Wenn du keinen Dateinamen angibst, wird automatisch ein Name aus <em>Service Techniker</em> +
+              <em>Zeitraum</em> erzeugt (wie in der EXE-Version).</li>
+          <li>Das Layout &amp; die Berechnungen der Zoho-Packliste kommen aus <code>packliste_core.py</code>.</li>
+        </ul>
+      </section>
+    </main>
+
+    <footer>
+      © Packlistenconverter – Zoho CRM
+    </footer>
   </div>
-</header>
-
-<main>
-  <div class="card">
-    <h2>Packliste konvertieren</h2>
-    <p class="subtitle">
-      Excel-Packliste hochladen, serverseitig konvertieren und fertig formatierte Datei herunterladen.
-    </p>
-
-    <form method="post" enctype="multipart/form-data">
-      <div class="form-row">
-        <label for="input_file">Packlisten-Datei auswählen (*.xlsx / *.xls / *.csv)</label>
-        <input type="file" id="input_file" name="input_file" required>
-      </div>
-
-      <div class="form-row horizontal">
-        <label for="desired_name">Gewünschter Dateiname (optional, ohne „.xlsx“)</label>
-        <input
-          type="text"
-          id="desired_name"
-          name="desired_name"
-          placeholder="z.B. Packliste_20251126"
-          value="{{ last_desired_name or '' }}"
-        >
-      </div>
-
-      <div class="submit-row">
-        <button type="submit" class="btn btn-primary">
-          Konvertieren &amp; herunterladen
-        </button>
-      </div>
-    </form>
-
-    {% if error %}
-      <div class="error-box">
-        {{ error }}
-      </div>
-    {% endif %}
-
-    <div class="hint">
-      <strong>Hinweise</strong>
-      <ul>
-        <li>Die Datei wird nur temporär auf dem Server gespeichert und nach der Konvertierung wieder gelöscht.</li>
-        <li>Das Format der ZOHO-Packliste (Spalten, Layout) kommt aus <code>packliste_core.py</code>.</li>
-        <li>Unterstützte Formate: <code>.xlsx</code>, <code>.xls</code>, <code>.csv</code>.</li>
-      </ul>
-    </div>
-  </div>
-</main>
-
-<footer>
-  © Packlistenconverter
-</footer>
-
 </body>
 </html>
