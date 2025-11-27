@@ -177,7 +177,9 @@ def manage_dichtungen():
     if request.method == "POST":
         data = request.get_json() or {}
         dichtungen = data.get("dichtungen", [])
-        save_dichtungen(dichtungen)
+        ok = save_dichtungen(dichtungen)
+        if not ok:
+            return jsonify({"ok": False, "error": "Speichern fehlgeschlagen"}), 500
         return jsonify({"ok": True})
     else:
         user_dichtungen = load_dichtungen()
