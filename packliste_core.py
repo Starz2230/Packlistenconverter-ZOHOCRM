@@ -7,6 +7,7 @@ import json
 import math
 import shutil
 import datetime
+from pathlib import Path
 
 from copy import copy
 
@@ -53,7 +54,17 @@ DEFAULT_DICHTUNGEN = []
 def resource_path(relative_path: str) -> str:
     """
     Liefert einen Pfad relativ zu dieser Datei (funktioniert auch auf dem Server).
+
+    Für die Dichtungs-Konfiguration erlauben wir auch den Umgebungs-Parameter
+    ``DICHTUNGEN_PATH``. Wenn der nicht gesetzt ist, fällt der Pfad auf die
+    Projekt-Root zurück (neben ``packliste_core.py``). So können Deployments
+    einen beschreibbaren Speicherort hinterlegen.
     """
+
+    env_path = os.getenv("DICHTUNGEN_PATH")
+    if env_path and Path(env_path).parent.exists():
+        return env_path
+
     base = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base, relative_path)
 
@@ -395,17 +406,25 @@ def adjust_dichtung_column_widths(ws, dicht_col_map, max_width=12, min_width=6):
 # Laden / Speichern der Dichtungen
 # ------------------------------------------------------------
 
-def save_dichtungen(dichtungen_list):
+def save_dichtungen(dichtungen_list) -> bool:
     """
     Speichert die Dichtungen im JSON-Format.
     Wird von der Web-Oberfläche aufgerufen.
+
+    Rückgabe: ``True`` bei Erfolg, sonst ``False``.
     """
-    path = resource_path(DICHTUNGEN_CONFIG)
+
+    path = Path(resource_path(DICHTUNGEN_CONFIG))
     try:
-        with open(path, "w", encoding="utf-8") as f:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = path.with_suffix(path.suffix + ".tmp")
+        with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(dichtungen_list, f, ensure_ascii=False, indent=2)
+        tmp_path.replace(path)
+        return True
     except Exception as e:
         print("Fehler beim Speichern der Dichtungen:", e)
+        return False
 
 
 def load_dichtungen():

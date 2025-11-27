@@ -515,6 +515,12 @@
       if(!resp.ok){
         throw new Error("Serverfehler");
       }
+
+      const payload = await resp.json();
+      if(!payload.ok){
+        throw new Error(payload.error || "Speichern fehlgeschlagen");
+      }
+
       showToast("Dichtungen gespeichert ✔");
     }catch(e){
       console.error(e);
